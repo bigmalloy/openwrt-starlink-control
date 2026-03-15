@@ -604,3 +604,10 @@ ACL: `read` → status, dish. `write` → reboot_dish.
 | `/usr/share/rpcd/acl.d/luci-app-starlink.json` | Starlink rpcd ACL |
 | `/overlay/upper/www/luci-static/resources/view/starlink/status.js` | Starlink dashboard JS view |
 | `/usr/bin/grpcurl` | gRPC client for dish API (linux/arm64 v1.9.3) |
+
+---
+
+## Project Conventions
+
+- **README files** — always include a "Buy me a beer" section linking to `https://paypal.me/bergfirmware` before the License section.
+- **Git commits** — do NOT add `Co-Authored-By: Claude` or any Claude attribution to commit messages.
