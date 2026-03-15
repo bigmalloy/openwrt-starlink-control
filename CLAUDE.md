@@ -607,7 +607,18 @@ ACL: `read` → status, dish. `write` → reboot_dish.
 
 ---
 
+## GitHub Repository
+
+| Item | Value |
+|------|-------|
+| Repo | `https://github.com/bigmalloy/openwrt-starlink-control` |
+| Local path | `/home/mike/claude/openwrt-starlink-apk` |
+| Latest release | `v1.0.0` — `luci-app-starlink-1.0.0-r1.apk` |
+| APK output | `output/luci-app-starlink-1.0.0-r1.apk` |
+
+---
+
 ## Project Conventions
 
-- **README files** — always include a "Buy me a beer" section linking to `https://paypal.me/bergfirmware` before the License section.
+- **README files** — always include a "Buy me a beer" section (PayPal link: `https://paypal.me/bergfirmware`) before the License section.
 - **Git commits** — do NOT add `Co-Authored-By: Claude` or any Claude attribution to commit messages.
