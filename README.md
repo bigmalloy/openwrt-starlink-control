@@ -20,6 +20,7 @@ Works with Starlink Gen3 and higher dish
 
 Auto-refreshes every 10 seconds.
 
+Note: The alignment data provided is direct form the dish and after confirming with star-link support is more accurate than the phone app that incorrectly reports over 6 degrees misalignment and should be ignored if the dish reports its aligned.
 ---
 
 ## Requirements
