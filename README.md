@@ -42,9 +42,11 @@ This package is designed to work alongside [starlink-openwrt-ipv6-optimized](htt
 
 ---
 
-## Install grpcurl
+## Installation
 
-grpcurl is needed to query the Starlink dish gRPC API at `192.168.100.1:9200`.
+### Step 1 — Install grpcurl
+
+grpcurl is required to query the Starlink dish gRPC API at `192.168.100.1:9200`. It is not included in the APK and must be installed first.
 
 ```sh
 # Download grpcurl v1.9.3 for linux/arm64
@@ -58,18 +60,16 @@ chmod +x /usr/bin/grpcurl
 grpcurl -plaintext -d '{"getStatus":{}}' 192.168.100.1:9200 SpaceX.API.Device.Device/Handle
 ```
 
----
-
-## Install the APK
+### Step 2 — Install the APK
 
 Download the latest `.apk` from [Releases](../../releases).
 
 ```sh
 # Copy to router
-scp -O luci-app-starlink-1.0.0-r1.apk root@192.168.1.1:/tmp/
+scp -O luci-app-starlink-1.0.0-r2.apk root@192.168.1.1:/tmp/
 
 # Install (no key verification needed for local install)
-ssh root@192.168.1.1 'apk add --allow-untrusted /tmp/luci-app-starlink-1.0.0-r1.apk'
+ssh root@192.168.1.1 'apk add --allow-untrusted /tmp/luci-app-starlink-1.0.0-r2.apk'
 ```
 
 The post-install script restarts `rpcd` and `uhttpd` automatically. Navigate to **Network → Starlink** in the LuCI menu.
