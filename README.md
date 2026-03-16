@@ -38,46 +38,25 @@ This package is designed to work alongside [starlink-openwrt-ipv6-optimized](htt
 | `luci-base` | LuCI web interface |
 | `rpcd` | RPC daemon (usually pre-installed) |
 | `jsonfilter` | JSON parser for shell scripts |
-| `grpcurl` | Required for dish telemetry (see below) |
+| `grpcurl` | Required for dish telemetry — **bundled in the APK from v1.0.0-r3** (installed automatically to `/usr/bin/grpcurl`) |
 
 ---
 
 ## Installation
 
-### Step 1 — Install grpcurl
-
-grpcurl is required to query the Starlink dish gRPC API at `192.168.100.1:9200`. It is not included in the APK and must be installed first.
-
-Use the install script (auto-detects architecture):
-
-```sh
-scp -O install-grpcurl.sh root@192.168.1.1:/tmp/
-ssh root@192.168.1.1 'sh /tmp/install-grpcurl.sh'
-```
-
-Or manually for linux/arm64 (GL-iNet Beryl AX / MT3000):
-
-```sh
-cd /tmp
-wget -O grpcurl.tar.gz https://github.com/fullstorydev/grpcurl/releases/download/v1.9.3/grpcurl_1.9.3_linux_arm64.tar.gz
-tar xzf grpcurl.tar.gz grpcurl
-mv grpcurl /usr/bin/grpcurl
-chmod +x /usr/bin/grpcurl
-```
-
-### Step 2 — Install the APK
-
 Download the latest `.apk` from [Releases](../../releases).
 
 ```sh
 # Copy to router
-scp -O luci-app-starlink-1.0.0-r2.apk root@192.168.1.1:/tmp/
+scp -O luci-app-starlink-1.0.0-r3.apk root@192.168.1.1:/tmp/
 
 # Install (no key verification needed for local install)
-ssh root@192.168.1.1 'apk add --allow-untrusted /tmp/luci-app-starlink-1.0.0-r2.apk'
+ssh root@192.168.1.1 'apk add --allow-untrusted /tmp/luci-app-starlink-1.0.0-r3.apk'
 ```
 
-The post-install script restarts `rpcd` and `uhttpd` automatically. Navigate to **Network → Starlink** in the LuCI menu.
+The post-install script installs `grpcurl`, restarts `rpcd` and `uhttpd` automatically. Navigate to **Network → Starlink** in the LuCI menu.
+
+> **Note:** From v1.0.0-r3, grpcurl is bundled and installed automatically. No manual grpcurl installation required.
 
 ---
 
