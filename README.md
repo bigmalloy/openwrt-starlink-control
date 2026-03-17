@@ -24,6 +24,34 @@ Auto-refreshes every 10 seconds.
 Note: The alignment data provided is direct from the dish API and after confirming with star-link support is more accurate than the phone app that incorrectly reports over 6 degrees misalignment and should be ignored if the dish reports its aligned.
 ---
 
+## One-Click Optimal Starlink IPv6 Configuration
+
+The **Configuration** card includes a **Turn Starlink Config On** button that applies the full recommended OpenWrt setup for Starlink residential with a single click — no SSH or command line needed.
+
+### What it configures
+
+| Area | Setting |
+|------|---------|
+| **IPv6 WAN** | DHCPv6-PD with `reqprefix=auto`, `ip6assign=64`, `peerdns=0` |
+| **odhcpd prefix lifetimes** | `max_preferred_lifetime=3600`, `max_valid_lifetime=7200` — fixes Starlink's ~129s/~279s prefix lifetimes that cause constant IPv6 address churn on LAN clients |
+| **DNS** | Cloudflare (1.1.1.1 / 1.0.0.1) + Google (8.8.8.8 / 8.8.4.4), IPv4 and IPv6, peerdns disabled |
+| **NTP** | Adds Starlink dish (`192.168.100.1`) as GPS Stratum 1 source (~85–123µs accuracy) |
+| **Firewall** | Software flow offloading enabled, hardware offloading disabled (keeps fq_codel active), MSS clamping (`mtu_fix=1`) for both ingress and egress |
+| **TCP congestion control** | `hybla` (satellite-optimised, RTT-compensating) with automatic fallback to CDG → BBR → cubic |
+| **Kernel / sysctl** | `fq_codel` default qdisc, `tcp_fastopen=3`, `tcp_mtu_probing=2`, `accept_ra=2` (required for IPv6 when forwarding=1), conntrack timeouts from official Starlink Gen2 firmware |
+
+### Button states
+
+| State | Meaning |
+|-------|---------|
+| 🔵 **Turn Starlink Config On** | Config not yet applied, or a setting has been changed since last apply |
+| 🟡 **⟳ Applying…** | Script running in background (~30–45s) |
+| 🟢 **✓ Starlink Config Active** | All settings verified correct |
+
+The dashboard checks the configuration on every 10-second refresh. If any watched setting is changed (via LuCI, UCI, or SSH), the button reverts to blue within 10 seconds so you can re-apply.
+
+---
+
 ## Related
 
 This package is designed to work alongside [starlink-openwrt-ipv6-optimized](https://github.com/bigmalloy/starlink-openwrt-ipv6-optimized) — a companion guide and configuration reference for setting up OpenWrt as a Starlink bypass router, covering IPv6, odhcpd prefix lifetime fixes, firewall, congestion control, and more.
