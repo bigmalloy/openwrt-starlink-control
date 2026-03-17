@@ -29,6 +29,12 @@ var callDisableHwOffloading = rpc.declare({
 	expect: {}
 });
 
+var callEnableHwOffloading = rpc.declare({
+	object: 'luci.starlink',
+	method: 'enable_hw_offloading',
+	expect: {}
+});
+
 var callStarlinkConfigStatus = rpc.declare({
 	object: 'luci.starlink',
 	method: 'starlink_config_status',
@@ -88,6 +94,24 @@ var callSetDnsMalware = rpc.declare({
 	method: 'set_dns_malware',
 	expect: {}
 });
+
+var callSetStaticIp = rpc.declare({
+	object: 'luci.starlink',
+	method: 'set_static_ip',
+	params: ['mac', 'ip', 'hostname'],
+	expect: {}
+});
+
+var callRemoveStaticIp = rpc.declare({
+	object: 'luci.starlink',
+	method: 'remove_static_ip',
+	params: ['mac'],
+	expect: {}
+});
+
+
+// Per-device data store — keyed by row index, repopulated on each render
+var _deviceData = {};
 
 // Tracks whether "Apply Starlink Config" was clicked and the script is still running.
 // Persists across view rebuilds so the button shows a waiting state mid-flight.
@@ -214,6 +238,9 @@ var CSS = '<style>' +
 '.sl-cfg-btn{width:100%;margin-top:12px;padding:8px 0;border:1px solid;border-radius:6px;font-size:0.88em;font-weight:600;letter-spacing:.03em}' +
 '.sl-cfg-btn:hover:not(:disabled){opacity:0.85;cursor:pointer}' +
 '.sl-cfg-btn:disabled{cursor:default}' +
+'.sl-heater-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:9px 0;border-top:1px solid #21262d;font-size:0.88em;color:var(--sl-text)}' +
+'.sl-heater-chk{width:16px;height:16px;cursor:pointer;accent-color:#2ea043}' +
+'.sl-heater-chk:disabled{cursor:not-allowed;opacity:0.4}' +
 '</style>';
 
 // ── Card builders ─────────────────────────────────────────────────────────────
@@ -294,7 +321,7 @@ function buildAlignmentCard(d) {
 	var tiltDir   = tiltDiff   < 0 ? '↓' : '↑';
 	var rotateDir = rotateDiff > 0 ? '↻' : '↶';
 
-	var aligned = Math.abs(tiltDiff) < 0.1 && Math.abs(rotateDiff) < 0.1;
+	var aligned = Math.abs(tiltDiff) < 1.0 && Math.abs(rotateDiff) < 1.0;
 
 	if (aligned) {
 		body += '<div class="sl-align-ok">✓ Dish is well aligned</div>';
@@ -313,9 +340,6 @@ function buildAlignmentCard(d) {
 	body += row('Elevation',       boreEl.toFixed(2) + '° → ' + desEl.toFixed(2) + '°');
 	body += row('Azimuth',         boreAz.toFixed(2) + '° → ' + desAz.toFixed(2) + '°');
 	if (d.attitude) body += row('Attitude', badge(d.attitude.replace('FILTER_', ''), 'info'));
-
-	// Reboot button
-	body += '<button class="sl-reboot-btn" id="sl-reboot-btn" onclick="starlinkRebootDish(this)">⟳ Reboot Dish</button>';
 
 	return card('Alignment', '🎯', body);
 }
@@ -351,6 +375,18 @@ function buildAlertsCard(d) {
 	body += alItem(notObstructed,        'Not obstructed',                           'Dish obstructed');
 	body += alItem(notDisabled,          'Not disabled',                             'Disabled: ' + d.disablement);
 	body += '</div>';
+
+	// Reboot button
+	body += '<button class="sl-reboot-btn" id="sl-reboot-btn" onclick="starlinkRebootDish(this)">⟳ Reboot Dish</button>';
+
+	// Heater status (read-only — dish setConfig requires SpaceX auth)
+	if (d.heater_mode === 'ALWAYS_ON' || d.heater_mode === 'ALWAYS_OFF') {
+		var heaterOn = d.heater_mode === 'ALWAYS_ON';
+		body += '<div class="sl-heater-row">' +
+			'<span>❄ Snow melt heater</span>' +
+			badge(heaterOn ? 'on' : 'off', heaterOn ? 'warn' : 'muted') +
+			'</div>';
+	}
 
 	return card('Alerts', '🔔', body);
 }
@@ -492,7 +528,7 @@ function fmtKB(kb) {
 	return mb >= 1024 ? (mb / 1024).toFixed(1) + '\u00a0GB' : Math.round(mb) + '\u00a0MB';
 }
 
-function buildRouterStatsCard(rs) {
+function buildRouterStatsCard(rs, s) {
 	if (!rs || !rs.mem_total) {
 		return card('Router Stats', '⚡', '<div class="sl-na">No data</div>');
 	}
@@ -548,6 +584,32 @@ function buildRouterStatsCard(rs) {
 	body += loadBar(load5,  numCpu, '5\u00a0min');
 	body += loadBar(load15, numCpu, '15\u00a0min');
 
+	// HW offloading toggle
+	var hwOn = s && s.hw_offloading === '1';
+	body += '<div class="sl-heater-row">' +
+		'<span>Hardware flow offloading</span>' +
+		'<input type="checkbox" class="sl-heater-chk" id="sl-hwoff-chk"' +
+		(hwOn ? ' checked' : '') +
+		' onchange="starlinkToggleHwOffloading(this)">' +
+		'</div>';
+	var targetNpu = {
+		'mediatek/filogic': 'MediaTek Filogic NPU',
+		'mediatek/mt7622':  'MediaTek MT7622 NPU',
+		'mediatek/mt7621':  'MediaTek MT7621',
+		'ipq807x':          'Qualcomm IPQ807x NPU',
+		'ipq40xx':          'Qualcomm IPQ40xx NPU',
+		'mvebu/cortexa9':   'Marvell hardware engine',
+		'bcm4908':          'Broadcom Runner NPU',
+		'bcm27xx':          'Broadcom NPU',
+	};
+	var target  = (s && s.board_target) ? s.board_target : '';
+	var socName = targetNpu[target] || (target ? target + ' NPU' : 'hardware NPU');
+	body += '<div style="font-size:0.78em;color:var(--sl-muted);padding:4px 2px 0">' +
+		(hwOn
+			? '⚠ Hardware offloading active — fq_codel bypassed (' + socName + ' handles routing)'
+			: 'Enable if CPU consistently hits 100% — offloads routing to the ' + socName + '. Disables fq_codel AQM.') +
+		'</div>';
+
 	return card('Router Stats', '⚡', body);
 }
 
@@ -587,18 +649,25 @@ function buildDevicesCard(devData, s) {
 
 	var body = '';
 
+	var staticLeases = (devData && devData.static_leases) ? devData.static_leases : {};
+
 	if (list.length === 0) {
 		body += '<div class="sl-na">No devices detected on LAN</div>';
-		return card('Connected Devices', '🖥️', body);
+		return card('Connected Devices', '🖥️', body, 'sl-card-full');
 	}
 
-	body += '<div style="max-height:280px;overflow-y:auto;margin:-4px -2px">';
+	_deviceData = {};
+	body += '<div style="max-height:400px;overflow-y:auto;margin:-4px -2px">';
 	for (var j = 0; j < list.length; j++) {
-		var d   = list[j];
+		var d    = list[j];
 		var name = d.hostname ? d.hostname : d.ip;
 		var sub  = d.hostname ? d.ip : '';
-		var dotC = d.active ? 'var(--sl-green)' : '#444c56';
+		var dotC   = d.active ? 'var(--sl-green)' : '#444c56';
 		var stateC = d.active ? 'ok' : 'off';
+		var macKey = d.mac.toLowerCase();
+		var staticIp = staticLeases[macKey] || '';
+		var rowKey = 'sl-dev-' + j;
+		_deviceData[rowKey] = { mac: d.mac, ip: d.ip, hostname: d.hostname || '', static_ip: staticIp };
 
 		body += '<div class="sl-row" style="padding:6px 2px">';
 
@@ -610,10 +679,17 @@ function buildDevicesCard(devData, s) {
 			(sub ? '<span style="color:var(--sl-muted);font-size:0.8em;margin-left:5px">' + sub + '</span>' : '') +
 			'</span></span>';
 
-		// Right: MAC + state badge
+		// Right: MAC + state badge + static IP button
+		var pinStyle = staticIp
+			? 'background:#1c2128;border:1px solid #2ea043;color:#3fb950'
+			: 'background:#1c2128;border:1px solid #444;color:#8b949e';
+		var pinLabel = staticIp ? ('📌\u00a0' + staticIp) : '📌\u00a0Static IP';
 		body += '<span style="display:flex;align-items:center;gap:6px;flex-shrink:0">' +
 			'<span style="color:var(--sl-muted);font-size:0.78em;font-family:monospace">' + d.mac + '</span>' +
 			badge(d.state, stateC) +
+			'<button onclick="starlinkSetStaticIp(\'' + rowKey + '\')" ' +
+			'style="' + pinStyle + ';padding:2px 8px;border-radius:4px;font-size:0.78em;cursor:pointer;white-space:nowrap">' +
+			pinLabel + '</button>' +
 			'</span>';
 
 		body += '</div>';
@@ -633,7 +709,7 @@ function buildDevicesCard(devData, s) {
 		body += row('Pool size', dhcpLimit + ' addresses');
 	}
 
-	return card('Connected Devices &nbsp;' + titleBadge, '🖥️', body);
+	return card('Connected Devices &nbsp;' + titleBadge, '🖥️', body, 'sl-card-full');
 }
 
 function buildDNSCard(s) {
@@ -809,7 +885,7 @@ function buildConfigCard(s, cs) {
 			cs.issues.replace(/,$/, '') + '</code></div>';
 	}
 
-	return card('Configuration — Active Optimal Starlink IPv6 Config &amp; Settings', '⚙️', body, 'sl-card-full');
+	return card('Configuration — Active Optimal Starlink IPv6 Config &amp; Settings', '⚙️', body);
 }
 
 // ── Reboot handler (global so inline onclick can reach it) ───────────────────
@@ -833,6 +909,47 @@ window.starlinkRebootDish = function(btn) {
 	}).catch(function() {
 		btn.textContent = '✗ RPC error';
 		btn.disabled = false;
+	});
+};
+
+// ── Static IP handler ────────────────────────────────────────────────────────
+
+window.starlinkSetStaticIp = function(rowKey) {
+	var dev = _deviceData[rowKey];
+	if (!dev) return;
+	var label = dev.hostname || dev.mac;
+	var current = dev.static_ip || dev.ip;
+	var hint = dev.static_ip ? ' (clear to remove)' : '';
+	var newIp = window.prompt('Static IP for ' + label + hint + ':', current);
+	if (newIp === null) return; // cancelled
+	newIp = newIp.trim();
+	if (newIp === '') {
+		if (!dev.static_ip) return; // nothing to remove
+		callRemoveStaticIp(dev.mac).then(function(r) {
+			if (!r || !r.success) window.alert('Failed to remove static IP');
+		}).catch(function() {
+			window.alert('RPC error');
+		});
+	} else {
+		callSetStaticIp(dev.mac, newIp, dev.hostname).then(function(r) {
+			if (!r || !r.success) window.alert('Failed to set static IP');
+		}).catch(function() {
+			window.alert('RPC error');
+		});
+	}
+};
+
+// ── HW offloading toggle handler ─────────────────────────────────────────────
+
+window.starlinkToggleHwOffloading = function(chk) {
+	chk.disabled = true;
+	var fn = chk.checked ? callEnableHwOffloading : callDisableHwOffloading;
+	fn().then(function(r) {
+		if (!r || !r.success) chk.checked = !chk.checked;
+		chk.disabled = false;
+	}).catch(function() {
+		chk.checked = !chk.checked;
+		chk.disabled = false;
 	});
 };
 
@@ -918,9 +1035,6 @@ return view.extend({
 		poll.add(function() {
 			return Promise.all([ callStatus(), callDish(), callStarlinkConfigStatus(), callDevices(), callRouterStats() ]).then(function(d) {
 				var s = d[0] || {};
-				if (s.hw_offloading === '1') {
-					callDisableHwOffloading();
-				}
 				self._updateView(container, s, d[1] || {}, d[2] || {}, d[3] || {}, d[4] || {});
 			});
 		}, 10);
@@ -938,7 +1052,7 @@ return view.extend({
 
 		// Header
 		html += '<div class="sl-header">';
-		html += '<div class="sl-title">🛸 Starlink</div>';
+		html += '<div class="sl-title">🛸 Starlink Control</div>';
 		html += '<div class="sl-meta">';
 		if (dishState) {
 			html += badge(dishState, isConn ? 'ok' : 'warn') + ' ';
@@ -954,10 +1068,10 @@ return view.extend({
 		html += buildIPv6Card(s);
 		html += buildTrafficCard(s, d);
 		html += buildQualityCard(s, d);
-		html += buildRouterStatsCard(rs);
-		html += buildDevicesCard(devData, s);
+		html += buildRouterStatsCard(rs, s);
 		html += buildDNSCard(s);
 		html += buildConfigCard(s, cs);
+		html += buildDevicesCard(devData, s);
 		html += '</div>';
 
 		html += '</div>';

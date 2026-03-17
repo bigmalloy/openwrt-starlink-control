@@ -5,7 +5,7 @@
 set -e
 
 PKG_NAME="luci-app-starlink"
-PKG_VER="1.0.0-r8"
+PKG_VER="1.0.0-r9"
 PKG_ARCH="all"
 PKG_DESC="LuCI Starlink Status Dashboard"
 PKG_URL="https://github.com/bigmalloy/starlink-openwrt"
