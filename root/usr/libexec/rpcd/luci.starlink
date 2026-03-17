@@ -393,6 +393,23 @@ get_router_stats() {
     swap_total=$(awk  '/^SwapTotal:/    {print $2}' /proc/meminfo)
     swap_free=$(awk   '/^SwapFree:/     {print $2}' /proc/meminfo)
 
+    # Fan: find first cooling device with type matching *fan*
+    local fan_state="-1" fan_max="7"
+    for cd in /sys/class/thermal/cooling_device*; do
+        [ -d "$cd" ] || continue
+        case "$(cat "$cd/type" 2>/dev/null)" in
+            *fan*|*Fan*)
+                fan_state=$(cat "$cd/cur_state" 2>/dev/null || echo "0")
+                fan_max=$(cat "$cd/max_state"   2>/dev/null || echo "7")
+                break ;;
+        esac
+    done
+
+    # CPU temperature from first thermal zone (millidegrees → °C)
+    local cpu_temp_mc cpu_temp
+    cpu_temp_mc=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo "0")
+    cpu_temp=$(echo "$cpu_temp_mc" | awk '{printf "%.1f", $1/1000}')
+
     printf '{'
     printf '"load1":"%s","load5":"%s","load15":"%s",'  "$load1" "$load5" "$load15"
     printf '"num_cpus":%s,'                             "${num_cpus:-1}"
@@ -403,7 +420,10 @@ get_router_stats() {
     printf '"mem_cached":%s,'                           "${mem_cached:-0}"
     printf '"mem_sreclaimable":%s,'                     "${mem_srec:-0}"
     printf '"swap_total":%s,'                           "${swap_total:-0}"
-    printf '"swap_free":%s'                             "${swap_free:-0}"
+    printf '"swap_free":%s,'                            "${swap_free:-0}"
+    printf '"fan_state":%s,'                            "${fan_state:--1}"
+    printf '"fan_max":%s,'                              "${fan_max:-7}"
+    printf '"cpu_temp":"%s"'                            "$cpu_temp"
     printf '}'
 }
 

@@ -241,6 +241,7 @@ var CSS = '<style>' +
 '.sl-heater-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:9px 0;border-top:1px solid #21262d;font-size:0.88em;color:var(--sl-text)}' +
 '.sl-heater-chk{width:16px;height:16px;cursor:pointer;accent-color:#2ea043}' +
 '.sl-heater-chk:disabled{cursor:not-allowed;opacity:0.4}' +
+'@keyframes sl-fan-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}' +
 '</style>';
 
 // ── Card builders ─────────────────────────────────────────────────────────────
@@ -528,6 +529,23 @@ function fmtKB(kb) {
 	return mb >= 1024 ? (mb / 1024).toFixed(1) + '\u00a0GB' : Math.round(mb) + '\u00a0MB';
 }
 
+function fanIcon(state, maxState) {
+	var on  = state > 0;
+	var pct = on ? state / maxState : 0;
+	// Duration: 0.4s at full, 2.5s at state 1
+	var dur = on ? (2.5 - pct * 2.1).toFixed(2) + 's' : '0s';
+	var c   = on ? (pct > 0.6 ? 'var(--sl-red)' : pct > 0.3 ? 'var(--sl-yellow)' : 'var(--sl-green)') : '#444c56';
+	var anim = on ? ('sl-fan-spin ' + dur + ' linear infinite') : 'none';
+	return '<svg viewBox="0 0 24 24" width="18" height="18" ' +
+		'style="vertical-align:middle;animation:' + anim + ';flex-shrink:0">' +
+		'<circle cx="12" cy="12" r="2.8" fill="' + c + '"/>' +
+		'<path d="M12 2c2 0 3.5 4 1 8C10.5 6 10 2 12 2z" fill="' + c + '"/>' +
+		'<path d="M22 12c0 2-4 3.5-8 1 4-2.5 6-3 8-1z" fill="' + c + '"/>' +
+		'<path d="M12 22c-2 0-3.5-4-1-8 2.5 4 3 6 1 8z" fill="' + c + '"/>' +
+		'<path d="M2 12c0-2 4-3.5 8-1-4 2.5-6 3-8 1z" fill="' + c + '"/>' +
+		'</svg>';
+}
+
 function buildRouterStatsCard(rs, s) {
 	if (!rs || !rs.mem_total) {
 		return card('Router Stats', '⚡', '<div class="sl-na">No data</div>');
@@ -552,6 +570,27 @@ function buildRouterStatsCard(rs, s) {
 	var swapUsed  = swapTotal - swapFree;
 
 	var body = '';
+
+	// ── Fan + CPU temp ───────────────────────────────────────────────────────
+	var fanState = parseInt(rs.fan_state);
+	var fanMax   = parseInt(rs.fan_max)   || 7;
+	var cpuTemp  = rs.cpu_temp || '';
+	if (fanState >= 0) {
+		var fanOn  = fanState > 0;
+		var fanPct = Math.round(fanState / fanMax * 100);
+		var fanLabel = fanOn ? fanState + '\u00a0/\u00a0' + fanMax + '\u00a0(' + fanPct + '%)' : 'off';
+		body += '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 2px 10px;border-bottom:1px solid #21262d;margin-bottom:10px">';
+		body += '<span style="display:flex;align-items:center;gap:8px;font-size:0.88em;color:var(--sl-muted)">' +
+			fanIcon(fanState, fanMax) +
+			'<span>Fan</span></span>';
+		body += '<span style="display:flex;align-items:center;gap:10px">';
+		body += '<span style="font-size:0.88em;font-weight:500">' + fanLabel + '</span>';
+		if (cpuTemp) {
+			var t = parseFloat(cpuTemp);
+			body += badge(cpuTemp + '\u00b0C', t >= 80 ? 'err' : t >= 70 ? 'warn' : 'ok');
+		}
+		body += '</span></div>';
+	}
 
 	// ── SVG gauges ──────────────────────────────────────────────────────────
 	body += '<div style="display:flex;justify-content:space-around;align-items:center;padding:4px 0 10px">';
