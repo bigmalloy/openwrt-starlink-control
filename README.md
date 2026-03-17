@@ -3,7 +3,7 @@
 LuCI dashboard for Starlink dish telemetry, alignment, alerts, IPv6 connectivity, traffic, and router configuration on OpenWrt 25.x.
 Works with Starlink Gen3 and higher dish
 
-![Starlink Control Dashboard](docs/stitched5.png)
+![Starlink Control Dashboard](docs/stitched6.png)
 
 ---
 
