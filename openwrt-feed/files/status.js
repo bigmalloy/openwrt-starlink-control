@@ -65,6 +65,30 @@ var callApplyStarlinkConfig = rpc.declare({
 	expect: {}
 });
 
+var callSetDnsDefault = rpc.declare({
+	object: 'luci.starlink',
+	method: 'set_dns_default',
+	expect: {}
+});
+
+var callSetDnsStarlink = rpc.declare({
+	object: 'luci.starlink',
+	method: 'set_dns_starlink',
+	expect: {}
+});
+
+var callSetDnsFamily = rpc.declare({
+	object: 'luci.starlink',
+	method: 'set_dns_family',
+	expect: {}
+});
+
+var callSetDnsMalware = rpc.declare({
+	object: 'luci.starlink',
+	method: 'set_dns_malware',
+	expect: {}
+});
+
 // Tracks whether "Apply Starlink Config" was clicked and the script is still running.
 // Persists across view rebuilds so the button shows a waiting state mid-flight.
 var _cfgApplying = false;
@@ -626,13 +650,14 @@ function buildDNSCard(s) {
 
 	// IPv4 DNS servers
 	var dns4 = (s.wan_dns || '').trim();
+	var dns4Label = peerdnsOff4 ? 'configured' : 'ISP';
+	var dns4Color = peerdnsOff4 ? 'ok' : 'info';
 	if (dns4) {
 		var servers4 = dns4.split(/\s+/);
 		body += '<div style="margin-top:8px;font-size:0.78em;color:var(--sl-muted);text-transform:uppercase;letter-spacing:.05em;padding:4px 0 2px">IPv4 DNS Servers</div>';
 		for (var i = 0; i < servers4.length; i++) {
 			var s4 = servers4[i];
-			body += row(s4,
-				badge('configured', 'ok'));
+			body += row(s4, badge(dns4Label, dns4Color));
 		}
 	} else {
 		body += row('IPv4 DNS', badge('none configured', 'err'));
@@ -640,16 +665,57 @@ function buildDNSCard(s) {
 
 	// IPv6 DNS servers
 	var dns6 = (s.wan6_dns || '').trim();
+	var dns6Label = peerdnsOff6 ? 'configured' : 'ISP';
+	var dns6Color = peerdnsOff6 ? 'ok' : 'info';
 	if (dns6) {
 		var servers6 = dns6.split(/\s+/);
 		body += '<div style="margin-top:8px;font-size:0.78em;color:var(--sl-muted);text-transform:uppercase;letter-spacing:.05em;padding:4px 0 2px">IPv6 DNS Servers</div>';
 		for (var j = 0; j < servers6.length; j++) {
 			var s6 = servers6[j];
 			body += row('<span style="font-family:monospace;font-size:0.9em">' + s6 + '</span>',
-				badge('configured', 'ok'));
+				badge(dns6Label, dns6Color));
 		}
 	} else {
 		body += row('IPv6 DNS', badge('none configured', 'err'));
+	}
+
+	// DNS mode dropdown
+	var wan_dns = s.wan_dns || '';
+	var dnsMode;
+	if (s.wan_peerdns !== '0') {
+		dnsMode = 'starlink';
+	} else if (wan_dns.indexOf('1.1.1.3') !== -1) {
+		dnsMode = 'family';
+	} else if (wan_dns.indexOf('1.1.1.2') !== -1) {
+		dnsMode = 'malware';
+	} else {
+		dnsMode = 'default';
+	}
+
+	var dnsModeLabels = {
+		'default':  'Default (Cloudflare + Google)',
+		'starlink': 'Starlink (ISP DNS)',
+		'family':   'Family Filter (Cloudflare for Families)',
+		'malware':  'Malware Filter (Cloudflare)',
+	};
+	var dnsModeNotes = {
+		'family':  'Blocks malware &amp; adult content — <code>1.1.1.3</code> / <code>1.0.0.3</code>',
+		'malware': 'Blocks malware only — <code>1.1.1.2</code> / <code>1.0.0.2</code>',
+	};
+
+	body += '<div style="margin-top:12px;font-size:0.78em;color:var(--sl-muted);text-transform:uppercase;letter-spacing:.05em;padding:4px 0 2px">DNS Mode</div>';
+	body += '<select id="sl-dns-mode" onchange="starlinkSetDnsMode(this)" ' +
+		'style="width:100%;padding:7px 10px;background:#21262d;border:1px solid #30363d;' +
+		'border-radius:6px;color:#c9d1d9;font-size:0.88em;cursor:pointer;outline:none">';
+	var modeKeys = ['default', 'starlink', 'family', 'malware'];
+	for (var mi = 0; mi < modeKeys.length; mi++) {
+		var mk = modeKeys[mi];
+		body += '<option value="' + mk + '"' + (dnsMode === mk ? ' selected' : '') + '>' +
+			dnsModeLabels[mk] + '</option>';
+	}
+	body += '</select>';
+	if (dnsModeNotes[dnsMode]) {
+		body += '<div class="sl-note">' + dnsModeNotes[dnsMode] + '</div>';
 	}
 
 	return card('DNS Servers', '🔒', body);
@@ -786,6 +852,30 @@ window.starlinkApplyConfig = function(btn) {
 	}).catch(function() {
 		_cfgApplying = false;
 		_cfgApplyStartTime = 0;
+	});
+};
+
+// ── DNS mode selector handler ─────────────────────────────────────────────────
+
+window.starlinkSetDnsMode = function(sel) {
+	var mode = sel.value;
+	sel.disabled = true;
+	var prev = sel.getAttribute('data-prev') || mode;
+	sel.setAttribute('data-prev', mode);
+	var calls = {
+		'default':  callSetDnsDefault,
+		'starlink': callSetDnsStarlink,
+		'family':   callSetDnsFamily,
+		'malware':  callSetDnsMalware,
+	};
+	var fn = calls[mode];
+	if (!fn) { sel.disabled = false; return; }
+	fn().then(function(r) {
+		if (!r || !r.success) sel.value = prev; // revert on failure
+		sel.disabled = false;
+	}).catch(function() {
+		sel.value = prev;
+		sel.disabled = false;
 	});
 };
 

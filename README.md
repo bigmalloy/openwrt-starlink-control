@@ -3,7 +3,7 @@
 LuCI dashboard for Starlink dish telemetry, alignment, alerts, IPv6 connectivity, traffic, and router configuration on OpenWrt 25.x.
 Works with Starlink Gen3 and higher dish
 
-![Starlink Dashboard](docs/screenshot.png)
+![Starlink Dashboard](docs/stitched3.png)
 
 ---
 
@@ -18,7 +18,7 @@ Works with Starlink Gen3 and higher dish
 - **Configuration** — TCP congestion control, qdisc, flow offloading, MTU fix, DHCPv6-PD lifetime settings
 - **Turn Starlink Config On** button — applies full optimal Starlink IPv6 config (DHCPv6-PD, odhcpd lifetime fix, DNS, NTP, firewall, kernel tuning) with one click; shows green "✓ Starlink Config Active" when all settings are verified, reverts if any setting drifts
 - **Set as Default Home Page** button — makes the Starlink dashboard the first page seen after login; click again to revert
-- **DNS Servers** — IPv4 and IPv6 DNS server list with peerdns status
+- **DNS Servers** — IPv4 and IPv6 DNS server list with peerdns status; **DNS Mode selector** dropdown to switch between Default (Cloudflare + Google), Starlink (ISP DNS), Family Filter (Cloudflare for Families — blocks malware + adult content), and Malware Filter (Cloudflare malware-only)
 - **Connected Devices** — scrollable device list with hostname, IP, MAC, active/stale state, plus DHCP range at the bottom
 - **Router Stats** — CPU load gauges, memory usage bar, load averages
 - **Reboot Dish** button with confirmation dialog
@@ -81,10 +81,10 @@ Download the latest `.apk` from [Releases](../../releases).
 
 ```sh
 # Copy to router
-scp -O luci-app-starlink-1.0.0-r7.apk root@192.168.1.1:/tmp/
+scp -O luci-app-starlink-1.0.0-r8.apk root@192.168.1.1:/tmp/
 
 # Install (no key verification needed for local install)
-ssh root@192.168.1.1 'apk add --allow-untrusted /tmp/luci-app-starlink-1.0.0-r7.apk'
+ssh root@192.168.1.1 'apk add --allow-untrusted /tmp/luci-app-starlink-1.0.0-r8.apk'
 ```
 
 The post-install script automatically downloads and installs `grpcurl`, then restarts `rpcd` and `uhttpd`. Navigate to **Network → Starlink** in the LuCI menu.
@@ -94,6 +94,8 @@ The post-install script automatically downloads and installs `grpcurl`, then res
 > **Note:** From v1.0.0-r6, the **Turn Starlink Config On** button in the Configuration card applies the full recommended Starlink IPv6 setup directly from LuCI — no SSH or manual script execution needed.
 >
 > **Note:** From v1.0.0-r7, DNS Servers, Connected Devices (with DHCP range), Router Stats, and the Set as Default Home Page button are included.
+>
+> **Note:** From v1.0.0-r8, the DNS card includes a **DNS Mode selector** — switch between Default, Starlink (ISP), Family Filter, and Malware Filter with one click. DNS settings are no longer monitored for config drift, so changing DNS via LuCI will not affect the Starlink Config Active status.
 
 ---
 
