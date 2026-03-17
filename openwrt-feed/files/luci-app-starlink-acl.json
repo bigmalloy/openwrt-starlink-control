@@ -3,12 +3,12 @@
     "description": "LuCI Starlink Status Dashboard",
     "read": {
       "ubus": {
-        "luci.starlink": [ "status", "dish" ]
+        "luci.starlink": [ "status", "dish", "starlink_config_status" ]
       }
     },
     "write": {
       "ubus": {
-        "luci.starlink": [ "reboot_dish", "disable_hw_offloading" ]
+        "luci.starlink": [ "reboot_dish", "disable_hw_offloading", "apply_starlink_config" ]
       }
     }
   }

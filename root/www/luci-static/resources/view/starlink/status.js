@@ -29,6 +29,23 @@ var callDisableHwOffloading = rpc.declare({
 	expect: {}
 });
 
+var callStarlinkConfigStatus = rpc.declare({
+	object: 'luci.starlink',
+	method: 'starlink_config_status',
+	expect: {}
+});
+
+var callApplyStarlinkConfig = rpc.declare({
+	object: 'luci.starlink',
+	method: 'apply_starlink_config',
+	expect: {}
+});
+
+// Tracks whether "Apply Starlink Config" was clicked and the script is still running.
+// Persists across view rebuilds so the button shows a waiting state mid-flight.
+var _cfgApplying = false;
+var _cfgApplyStartTime = 0;
+
 // ── Formatters ────────────────────────────────────────────────────────────────
 
 function fmtBytes(b) {
@@ -146,6 +163,9 @@ var CSS = '<style>' +
 '.sl-al-err{background:var(--sl-red)}' +
 '.sl-al-txt-ok{color:var(--sl-text)}' +
 '.sl-al-txt-err{color:var(--sl-red);font-weight:600}' +
+'.sl-cfg-btn{width:100%;margin-top:12px;padding:8px 0;border:1px solid;border-radius:6px;font-size:0.88em;font-weight:600;letter-spacing:.03em}' +
+'.sl-cfg-btn:hover:not(:disabled){opacity:0.85;cursor:pointer}' +
+'.sl-cfg-btn:disabled{cursor:default}' +
 '</style>';
 
 // ── Card builders ─────────────────────────────────────────────────────────────
@@ -388,7 +408,7 @@ function buildQualityCard(s, d) {
 	return card('Quality', '📶', body);
 }
 
-function buildConfigCard(s) {
+function buildConfigCard(s, cs) {
 	var body = '<div class="sl-cfg-grid">';
 
 	var tcp_cc = s.tcp_cc || 'unknown';
@@ -429,7 +449,44 @@ function buildConfigCard(s) {
 		body += '<div class="sl-note">⚠ odhcpd prefix lifetime override is <strong>not set</strong> — LAN clients may see frequent IPv6 address churn from Starlink\'s short lifetimes (~129s).</div>';
 	}
 
-	return card('Configuration', '⚙️', body, 'sl-card-full');
+	// ── Starlink config apply button ─────────────────────────────────────────
+	var cfgActive = cs && cs.active === true;
+
+	// If active just became true, or 90s timeout elapsed, clear the applying flag
+	if (cfgActive) {
+		_cfgApplying = false;
+		_cfgApplyStartTime = 0;
+	} else if (_cfgApplying && _cfgApplyStartTime && (Date.now() - _cfgApplyStartTime) > 90000) {
+		_cfgApplying = false;
+		_cfgApplyStartTime = 0;
+	}
+
+	var btnText, btnStyle, btnDisabled;
+	if (cfgActive) {
+		btnText     = '✓ Starlink Config Active';
+		btnStyle    = 'background:#1a7f37;border-color:#2ea043;color:#fff';
+		btnDisabled = 'disabled';
+	} else if (_cfgApplying) {
+		btnText     = '⟳ Applying… (updates in ~30s)';
+		btnStyle    = 'background:#9a6700;border-color:#d29922;color:#fff';
+		btnDisabled = 'disabled';
+	} else {
+		btnText     = 'Turn Starlink Config On';
+		btnStyle    = 'background:#21262d;border-color:#388bfd;color:#388bfd';
+		btnDisabled = '';
+	}
+
+	body += '<button class="sl-cfg-btn" ' + btnDisabled +
+		' style="' + btnStyle + '" onclick="starlinkApplyConfig(this)">' +
+		btnText + '</button>';
+
+	// Show drift detail when sentinel exists but values changed
+	if (cs && !cfgActive && cs.sentinel === true && cs.issues) {
+		body += '<div class="sl-note">⚠ Config was applied but some settings have changed: <code>' +
+			cs.issues.replace(/,$/, '') + '</code></div>';
+	}
+
+	return card('Configuration — Active Optimal Starlink IPv6 Config &amp; Settings', '⚙️', body, 'sl-card-full');
 }
 
 // ── Reboot handler (global so inline onclick can reach it) ───────────────────
@@ -456,6 +513,25 @@ window.starlinkRebootDish = function(btn) {
 	});
 };
 
+// ── Apply config handler (global so inline onclick can reach it) ─────────────
+
+window.starlinkApplyConfig = function(btn) {
+	if (btn.disabled) return;
+	_cfgApplying = true;
+	_cfgApplyStartTime = Date.now();
+	btn.disabled = true;
+	btn.textContent = '⟳ Applying…';
+	callApplyStarlinkConfig().then(function(r) {
+		if (!r || !r.started) {
+			_cfgApplying = false;
+			_cfgApplyStartTime = 0;
+		}
+	}).catch(function() {
+		_cfgApplying = false;
+		_cfgApplyStartTime = 0;
+	});
+};
+
 // ── View ──────────────────────────────────────────────────────────────────────
 
 return view.extend({
@@ -464,28 +540,28 @@ return view.extend({
 	handleReset:     null,
 
 	load: function() {
-		return Promise.all([ callStatus(), callDish() ]);
+		return Promise.all([ callStatus(), callDish(), callStarlinkConfigStatus() ]);
 	},
 
 	render: function(data) {
 		var self = this;
 		var container = E('div');
-		this._updateView(container, data[0] || {}, data[1] || {});
+		this._updateView(container, data[0] || {}, data[1] || {}, data[2] || {});
 
 		poll.add(function() {
-			return Promise.all([ callStatus(), callDish() ]).then(function(d) {
+			return Promise.all([ callStatus(), callDish(), callStarlinkConfigStatus() ]).then(function(d) {
 				var s = d[0] || {};
 				if (s.hw_offloading === '1') {
 					callDisableHwOffloading();
 				}
-				self._updateView(container, s, d[1] || {});
+				self._updateView(container, s, d[1] || {}, d[2] || {});
 			});
 		}, 10);
 
 		return container;
 	},
 
-	_updateView: function(container, s, d) {
+	_updateView: function(container, s, d, cs) {
 		var dishState = (d && d.available) ? (d.state || 'UNKNOWN') : null;
 		var isConn    = dishState === 'CONNECTED';
 		var now       = new Date().toLocaleTimeString();
@@ -511,7 +587,7 @@ return view.extend({
 		html += buildIPv6Card(s);
 		html += buildTrafficCard(s, d);
 		html += buildQualityCard(s, d);
-		html += buildConfigCard(s);
+		html += buildConfigCard(s, cs);
 		html += '</div>';
 
 		html += '</div>';

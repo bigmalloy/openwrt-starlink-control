@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-starlink
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=5
+PKG_RELEASE:=6
 
 PKG_MAINTAINER:=bigmalloy
 PKG_LICENSE:=MIT
@@ -48,6 +48,8 @@ define Package/luci-app-starlink/install
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_BIN) ./files/install-grpcurl.sh \
 		$(1)/usr/bin/install-grpcurl
+	$(INSTALL_BIN) ./files/starlink-setup \
+		$(1)/usr/bin/starlink-setup
 endef
 
 define Package/luci-app-starlink/preinst

@@ -23,6 +23,7 @@ for f in \
     usr/libexec/rpcd/luci.starlink \
     usr/share/luci/menu.d/luci-app-starlink.json \
     usr/share/rpcd/acl.d/luci-app-starlink.json \
+    usr/bin/starlink-setup \
     www/luci-static/resources/view/starlink/status.js
 do
     if [ ! -f "${SRC}/${f}" ]; then
@@ -34,6 +35,7 @@ done
 echo "[1/4] Creating remote directories..."
 ssh "root@${ROUTER}" \
     "mkdir -p \
+        /usr/bin \
         /usr/libexec/rpcd \
         /usr/share/luci/menu.d \
         /usr/share/rpcd/acl.d \
@@ -45,6 +47,11 @@ echo "[2/4] Copying files..."
 scp -O "${SRC}/usr/libexec/rpcd/luci.starlink" \
        "root@${ROUTER}:/usr/libexec/rpcd/luci.starlink"
 ssh "root@${ROUTER}" "chmod 755 /usr/libexec/rpcd/luci.starlink"
+
+# Setup script — must be executable
+scp -O "${SRC}/usr/bin/starlink-setup" \
+       "root@${ROUTER}:/usr/bin/starlink-setup"
+ssh "root@${ROUTER}" "chmod 755 /usr/bin/starlink-setup"
 
 # Menu entry
 scp -O "${SRC}/usr/share/luci/menu.d/luci-app-starlink.json" \

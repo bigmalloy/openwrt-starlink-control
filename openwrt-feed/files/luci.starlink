@@ -286,18 +286,76 @@ disable_hw_offloading() {
     printf '{"success":true}'
 }
 
+# ── starlink config status ────────────────────────────────────────────────────
+# Returns {"active":true/false,"sentinel":true/false,"issues":"..."}
+# active = sentinel file exists AND all expected UCI values are in place.
+
+get_starlink_config_status() {
+    local sentinel proto pref_lft valid_lft mtu_fix sw_off hw_off ntp_ok issues
+
+    if [ -f /etc/starlink-setup-done ]; then
+        sentinel="true"
+    else
+        sentinel="false"
+    fi
+
+    proto=$(uci -q get network.wan6.proto       2>/dev/null || echo "")
+    pref_lft=$(uci -q get dhcp.lan.max_preferred_lifetime 2>/dev/null || echo "")
+    valid_lft=$(uci -q get dhcp.lan.max_valid_lifetime    2>/dev/null || echo "")
+    mtu_fix=$(uci -q get firewall.@defaults[0].mtu_fix           2>/dev/null || echo "")
+    sw_off=$(uci -q get firewall.@defaults[0].flow_offloading    2>/dev/null || echo "")
+    hw_off=$(uci -q get firewall.@defaults[0].flow_offloading_hw 2>/dev/null || echo "")
+
+    if uci get system.ntp.server 2>/dev/null | grep -q '192.168.100.1'; then
+        ntp_ok="true"
+    else
+        ntp_ok="false"
+    fi
+
+    issues=""
+    [ "$proto"    != "dhcpv6" ] && issues="${issues}wan6.proto,"
+    [ "$pref_lft" != "3600"   ] && issues="${issues}max_preferred_lifetime,"
+    [ "$valid_lft" != "7200"  ] && issues="${issues}max_valid_lifetime,"
+    [ "$mtu_fix"  != "1"      ] && issues="${issues}mtu_fix,"
+    [ "$sw_off"   != "1"      ] && issues="${issues}flow_offloading,"
+    [ "$hw_off"   = "1"       ] && issues="${issues}flow_offloading_hw,"
+    [ "$ntp_ok"   != "true"   ] && issues="${issues}ntp,"
+
+    if [ "$sentinel" = "true" ] && [ -z "$issues" ]; then
+        printf '{"active":true,"sentinel":true,"issues":""}'
+    else
+        printf '{"active":false,"sentinel":%s,"issues":"%s"}' \
+            "$sentinel" "$(json_str "$issues")"
+    fi
+}
+
+# ── apply starlink config ─────────────────────────────────────────────────────
+
+apply_starlink_config() {
+    if [ ! -f /usr/bin/starlink-setup ]; then
+        printf '{"started":false,"error":"starlink-setup not found"}'
+        return
+    fi
+    # Remove sentinel so the script does a full re-apply of all UCI sections
+    rm -f /etc/starlink-setup-done
+    sh /usr/bin/starlink-setup > /tmp/starlink-setup.log 2>&1 &
+    printf '{"started":true}'
+}
+
 # ── rpcd dispatch ─────────────────────────────────────────────────────────────
 
 case "$1" in
     list)
-        printf '{"status":{"timeout":20},"dish":{"timeout":10},"reboot_dish":{"timeout":15},"disable_hw_offloading":{"timeout":15}}'
+        printf '{"status":{"timeout":20},"dish":{"timeout":10},"reboot_dish":{"timeout":15},"disable_hw_offloading":{"timeout":15},"starlink_config_status":{"timeout":5},"apply_starlink_config":{"timeout":10}}'
         ;;
     call)
         case "$2" in
-            status)               get_system_status ;;
-            dish)                 query_dish_status ;;
-            reboot_dish)          reboot_dish ;;
-            disable_hw_offloading) disable_hw_offloading ;;
+            status)                 get_system_status ;;
+            dish)                   query_dish_status ;;
+            reboot_dish)            reboot_dish ;;
+            disable_hw_offloading)  disable_hw_offloading ;;
+            starlink_config_status) get_starlink_config_status ;;
+            apply_starlink_config)  apply_starlink_config ;;
         esac
         ;;
 esac

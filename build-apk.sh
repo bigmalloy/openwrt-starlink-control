@@ -5,7 +5,7 @@
 set -e
 
 PKG_NAME="luci-app-starlink"
-PKG_VER="1.0.0-r5"
+PKG_VER="1.0.0-r6"
 PKG_ARCH="all"
 PKG_DESC="LuCI Starlink Status Dashboard"
 PKG_URL="https://github.com/bigmalloy/starlink-openwrt"
@@ -35,6 +35,8 @@ install -m 755 "$SRC/usr/libexec/rpcd/luci.starlink" \
                "$PKG/usr/libexec/rpcd/luci.starlink"
 install -m 755 "$(dirname "$0")/install-grpcurl.sh" \
                "$PKG/usr/bin/install-grpcurl"
+install -m 755 "$SRC/usr/bin/starlink-setup" \
+               "$PKG/usr/bin/starlink-setup"
 install -m 644 "$SRC/usr/share/luci/menu.d/luci-app-starlink.json" \
                "$PKG/usr/share/luci/menu.d/luci-app-starlink.json"
 install -m 644 "$SRC/usr/share/rpcd/acl.d/luci-app-starlink.json" \
