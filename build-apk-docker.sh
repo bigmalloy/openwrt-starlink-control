@@ -69,21 +69,22 @@ docker run --rm \
     make package/luci-app-starlink/compile V=s 2>&1 | tail -20
 
     echo "--- Copying output ---"
-    find bin/ -name "luci-app-starlink*" -type f | tee /tmp/found.txt
-    xargs -I{} cp {} /output/ < /tmp/found.txt
+    APK=$(find bin/ -name "luci-app-starlink*.apk" -type f | head -1)
+    cp "$APK" /output/
+    echo "Copied: $APK"
 
     echo "--- Signing APK ---"
     /builder/staging_dir/host/bin/apk --allow-untrusted adbsign \
       --sign-key /signing-key/key-build-p8 \
-      /output/luci-app-starlink-*.apk
+      /output/$(basename "$APK")
 
     echo "--- Verifying ---"
     /builder/staging_dir/host/bin/apk verify \
       --keys-dir /signing-key \
-      /output/luci-app-starlink-*.apk
+      /output/$(basename "$APK")
 
-    chown "${HOST_UID}:${HOST_GID}" /output/luci-app-starlink*
-    ls -lh /output/
+    chown "${HOST_UID}:${HOST_GID}" /output/$(basename "$APK")
+    ls -lh /output/$(basename "$APK")
   '
 
 echo ""
