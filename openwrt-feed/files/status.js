@@ -625,12 +625,12 @@ function buildRouterStatsCard(rs, s) {
 
 	// HW offloading toggle
 	var hwOn = s && s.hw_offloading === '1';
-	body += '<div class="sl-heater-row">' +
+	body += '<label class="sl-heater-row" for="sl-hwoff-chk" style="cursor:pointer">' +
 		'<span>Hardware flow offloading</span>' +
 		'<input type="checkbox" class="sl-heater-chk" id="sl-hwoff-chk"' +
 		(hwOn ? ' checked' : '') +
 		' onchange="starlinkToggleHwOffloading(this)">' +
-		'</div>';
+		'</label>';
 	var targetNpu = {
 		'mediatek/filogic': 'MediaTek Filogic NPU',
 		'mediatek/mt7622':  'MediaTek MT7622 NPU',
