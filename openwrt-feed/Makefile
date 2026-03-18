@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-starlink
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=20
+PKG_RELEASE:=21
 
 PKG_MAINTAINER:=bigmalloy
 PKG_LICENSE:=MIT
@@ -62,8 +62,7 @@ define Package/luci-app-starlink/postinst
 #!/bin/sh
 /usr/bin/install-grpcurl || echo "Warning: grpcurl install failed. Run /usr/bin/install-grpcurl manually."
 rm -rf /tmp/luci-modulecache /tmp/luci-indexcache
-( sleep 5; [ -f /etc/init.d/rpcd ]   && /etc/init.d/rpcd restart
-           [ -f /etc/init.d/uhttpd ] && /etc/init.d/uhttpd restart ) &
+setsid sh -c '{ sleep 5; [ -f /etc/init.d/rpcd ] && /etc/init.d/rpcd restart; [ -f /etc/init.d/uhttpd ] && /etc/init.d/uhttpd restart; }' </dev/null >/dev/null 2>&1 &
 exit 0
 endef
 
@@ -71,7 +70,6 @@ define Package/luci-app-starlink/prerm
 #!/bin/sh
 rm -f /usr/share/luci/menu.d/luci-app-starlink-home.json
 rm -rf /tmp/luci-modulecache /tmp/luci-indexcache
-( sleep 5; [ -f /etc/init.d/uhttpd ] && /etc/init.d/uhttpd restart ) &
 exit 0
 endef
 
