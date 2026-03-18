@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-starlink
 PKG_VERSION:=1.0.0
-PKG_RELEASE:=14
+PKG_RELEASE:=15
 
 PKG_MAINTAINER:=bigmalloy
 PKG_LICENSE:=MIT
@@ -69,6 +69,8 @@ endef
 
 define Package/luci-app-starlink/prerm
 #!/bin/sh
+rm -f /usr/share/luci/menu.d/luci-app-starlink-home.json
+[ -f /etc/init.d/uhttpd ] && rm -rf /tmp/luci-modulecache /tmp/luci-indexcache
 [ -f /etc/init.d/uhttpd ] && /etc/init.d/uhttpd restart
 exit 0
 endef
