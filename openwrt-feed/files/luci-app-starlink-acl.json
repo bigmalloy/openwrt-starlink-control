@@ -8,7 +8,7 @@
     },
     "write": {
       "ubus": {
-        "luci.starlink": [ "reboot_dish", "disable_hw_offloading", "apply_starlink_config", "set_home_page", "unset_home_page", "set_dns_default", "set_dns_starlink", "set_dns_family", "set_dns_malware" ]
+        "luci.starlink": [ "reboot_dish", "disable_hw_offloading", "enable_hw_offloading", "apply_starlink_config", "set_home_page", "unset_home_page", "set_dns_default", "set_dns_starlink", "set_dns_family", "set_dns_malware", "set_static_ip", "remove_static_ip" ]
       }
     }
   }
