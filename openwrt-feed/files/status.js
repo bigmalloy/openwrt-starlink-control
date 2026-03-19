@@ -412,11 +412,13 @@ function buildIPv6Card(s, d) {
 		if (hasLLA) {
 			// WAN interface is up (link-local present) but dish not sending /56
 			body += '<div class="sl-ipv6-warn">' +
-				'<div class="sl-ipv6-warn-title">⚠ Dish not sending DHCPv6-PD</div>' +
+				'<div class="sl-ipv6-warn-title">⚠ No IPv6 prefix from dish</div>' +
 				'<div class="sl-ipv6-warn-body">WAN link is up but no /56 prefix received. ' +
-				'The dish DHCPv6-PD server may have stopped after a reboot. ' +
-				'Hard power cycle the dish (unplug 10 s) to restore IPv6. ' +
-				'Software reboot does not fix this.</div>' +
+				'This is a known Starlink firmware bug — the dish DHCPv6-PD server sometimes ' +
+				'fails to restart after the nightly 3 am update reboot, stopping all IPv6 ' +
+				'to your network. IPv4 continues to work normally.<br><br>' +
+				'<strong>Fix:</strong> hard power cycle the dish (unplug 10 s, replug). ' +
+				'IPv6 returns within ~2 minutes. A software reboot does not fix this.</div>' +
 				'</div>';
 		} else {
 			// No link-local either — WAN interface not up
