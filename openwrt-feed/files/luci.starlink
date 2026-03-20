@@ -45,8 +45,9 @@ get_iface_stats() {
 }
 
 json_str() {
-    # Escape a value for embedding in a JSON string
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+    # Escape a value for embedding in a JSON string.
+    # Handles backslash, double-quote, and control characters (newline, CR, tab).
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n\r\t' '   '
 }
 
 get_ping_avg() {
@@ -82,12 +83,23 @@ query_dish_status() {
         return
     fi
 
-    local raw
-    # Try camelCase first (standard proto3 JSON), then snake_case fallback
-    raw=$(grpcurl -plaintext -max-time 5 \
-        -d '{"getStatus":{}}' \
-        "${DISH_IP}:${DISH_PORT}" "${DISH_SVC}" 2>/dev/null)
+    local raw cfg_raw tmp_status tmp_cfg
+    tmp_status="/tmp/.sl_dish_status.$$"
+    tmp_cfg="/tmp/.sl_dish_cfg.$$"
 
+    # Fire both gRPC calls in parallel to halve latency
+    grpcurl -plaintext -max-time 5 \
+        -d '{"getStatus":{}}' \
+        "${DISH_IP}:${DISH_PORT}" "${DISH_SVC}" > "$tmp_status" 2>/dev/null &
+    grpcurl -plaintext -max-time 5 \
+        -d '{"dish_get_config":{}}' \
+        "${DISH_IP}:${DISH_PORT}" "${DISH_SVC}" > "$tmp_cfg" 2>/dev/null &
+    wait
+
+    raw=$(cat "$tmp_status" 2>/dev/null); rm -f "$tmp_status"
+    cfg_raw=$(cat "$tmp_cfg" 2>/dev/null); rm -f "$tmp_cfg"
+
+    # snake_case fallback for older firmware
     if [ -z "$raw" ]; then
         raw=$(grpcurl -plaintext -max-time 5 \
             -d '{"get_status":{}}' \
@@ -99,19 +111,57 @@ query_dish_status() {
         return
     fi
 
-    # Parse key fields with jsonfilter (available on all OpenWrt 22+)
-    local state latency drop obst downlink uplink hw sw uptime
-    local snr_bool disablement eth_speed gps_sats elevation attitude
+    # Parse all fields in a single jsonfilter pass (one fork instead of 25+)
+    local state disablement rf_ready latency drop obst downlink uplink
+    local snr_bool hw sw eth_speed gps_sats elevation attitude
+    local tilt_now bore_el des_el bore_az des_az uptime
     local al_heating al_throttle al_shutdown al_psu_throttle
     local al_motors al_mast al_slow_eth al_roaming
-    local sw_update_state currently_obstructed
+    local sw_update_state currently_obstructed heater_mode
+
+    eval "$(echo "$raw" | jsonfilter \
+        -e 'state=@.dishGetStatus.state' \
+        -e 'disablement=@.dishGetStatus.disablementCode' \
+        -e 'rf_ready=@.dishGetStatus.readyStates.rf' \
+        -e 'latency=@.dishGetStatus.popPingLatencyMs' \
+        -e 'drop=@.dishGetStatus.popPingDropRate' \
+        -e 'obst=@.dishGetStatus.obstructionStats.fractionObstructed' \
+        -e 'downlink=@.dishGetStatus.downlinkThroughputBps' \
+        -e 'uplink=@.dishGetStatus.uplinkThroughputBps' \
+        -e 'snr_bool=@.dishGetStatus.isSnrAboveNoiseFloor' \
+        -e 'hw=@.dishGetStatus.deviceInfo.hardwareVersion' \
+        -e 'sw=@.dishGetStatus.deviceInfo.softwareVersion' \
+        -e 'eth_speed=@.dishGetStatus.ethSpeedMbps' \
+        -e 'gps_sats=@.dishGetStatus.gpsStats.gpsSats' \
+        -e 'elevation=@.dishGetStatus.boresightElevationDeg' \
+        -e 'attitude=@.dishGetStatus.alignmentStats.attitudeEstimationState' \
+        -e 'tilt_now=@.dishGetStatus.alignmentStats.tiltAngleDeg' \
+        -e 'bore_el=@.dishGetStatus.alignmentStats.boresightElevationDeg' \
+        -e 'des_el=@.dishGetStatus.alignmentStats.desiredBoresightElevationDeg' \
+        -e 'bore_az=@.dishGetStatus.alignmentStats.boresightAzimuthDeg' \
+        -e 'des_az=@.dishGetStatus.alignmentStats.desiredBoresightAzimuthDeg' \
+        -e 'uptime=@.dishGetStatus.deviceState.uptimeS' \
+        -e 'al_heating=@.dishGetStatus.alerts.isHeating' \
+        -e 'al_throttle=@.dishGetStatus.alerts.thermalThrottle' \
+        -e 'al_shutdown=@.dishGetStatus.alerts.thermalShutdown' \
+        -e 'al_psu_throttle=@.dishGetStatus.alerts.powerSupplyThermalThrottle' \
+        -e 'al_motors=@.dishGetStatus.alerts.motorsStuck' \
+        -e 'al_mast=@.dishGetStatus.alerts.mastNotVertical' \
+        -e 'al_slow_eth=@.dishGetStatus.alerts.slowEthernetSpeeds' \
+        -e 'al_roaming=@.dishGetStatus.alerts.roaming' \
+        -e 'sw_update_state=@.dishGetStatus.softwareUpdateState' \
+        -e 'currently_obstructed=@.dishGetStatus.currentlyObstructed' \
+        2>/dev/null)"
+
+    # uptime fallback: Gen3 puts it in deviceState, older firmware in deviceInfo
+    [ -z "$uptime" ] && \
+        uptime=$(echo "$raw" | jsonfilter -e '@.dishGetStatus.deviceInfo.upTimeS' 2>/dev/null)
+
+    # heater mode from config response (queried in parallel above)
+    heater_mode=$(echo "$cfg_raw" | jsonfilter -e '@.dishGetConfig.dishConfig.snowMeltMode' 2>/dev/null)
 
     # Gen3: state enum is absent when CONNECTED (proto3 omits zero-value fields).
     # Derive from disablementCode + readyStates.rf instead.
-    state=$(echo "$raw"      | jsonfilter -e '@.dishGetStatus.state'                               2>/dev/null)
-    disablement=$(echo "$raw"| jsonfilter -e '@.dishGetStatus.disablementCode'                     2>/dev/null)
-    local rf_ready
-    rf_ready=$(echo "$raw"   | jsonfilter -e '@.dishGetStatus.readyStates.rf'                      2>/dev/null)
     if [ -z "$state" ]; then
         if [ "$disablement" = "OKAY" ] && [ "$rf_ready" = "true" ]; then
             state="CONNECTED"
@@ -121,42 +171,6 @@ query_dish_status() {
             state="UNKNOWN"
         fi
     fi
-
-    latency=$(echo "$raw"    | jsonfilter -e '@.dishGetStatus.popPingLatencyMs'                    2>/dev/null)
-    drop=$(echo "$raw"       | jsonfilter -e '@.dishGetStatus.popPingDropRate'                     2>/dev/null)
-    obst=$(echo "$raw"       | jsonfilter -e '@.dishGetStatus.obstructionStats.fractionObstructed' 2>/dev/null)
-    downlink=$(echo "$raw"   | jsonfilter -e '@.dishGetStatus.downlinkThroughputBps'               2>/dev/null)
-    uplink=$(echo "$raw"     | jsonfilter -e '@.dishGetStatus.uplinkThroughputBps'                 2>/dev/null)
-    # Gen3 uses isSnrAboveNoiseFloor (bool); older firmware used snrAboveNoiseFloor (float)
-    snr_bool=$(echo "$raw"   | jsonfilter -e '@.dishGetStatus.isSnrAboveNoiseFloor'                2>/dev/null)
-    hw=$(echo "$raw"         | jsonfilter -e '@.dishGetStatus.deviceInfo.hardwareVersion'          2>/dev/null)
-    sw=$(echo "$raw"         | jsonfilter -e '@.dishGetStatus.deviceInfo.softwareVersion'          2>/dev/null)
-    eth_speed=$(echo "$raw"  | jsonfilter -e '@.dishGetStatus.ethSpeedMbps'                        2>/dev/null)
-    gps_sats=$(echo "$raw"   | jsonfilter -e '@.dishGetStatus.gpsStats.gpsSats'                    2>/dev/null)
-    elevation=$(echo "$raw"   | jsonfilter -e '@.dishGetStatus.boresightElevationDeg'                      2>/dev/null)
-    attitude=$(echo "$raw"    | jsonfilter -e '@.dishGetStatus.alignmentStats.attitudeEstimationState'    2>/dev/null)
-    tilt_now=$(echo "$raw"    | jsonfilter -e '@.dishGetStatus.alignmentStats.tiltAngleDeg'               2>/dev/null)
-    bore_el=$(echo "$raw"     | jsonfilter -e '@.dishGetStatus.alignmentStats.boresightElevationDeg'      2>/dev/null)
-    des_el=$(echo "$raw"      | jsonfilter -e '@.dishGetStatus.alignmentStats.desiredBoresightElevationDeg' 2>/dev/null)
-    bore_az=$(echo "$raw"     | jsonfilter -e '@.dishGetStatus.alignmentStats.boresightAzimuthDeg'        2>/dev/null)
-    des_az=$(echo "$raw"      | jsonfilter -e '@.dishGetStatus.alignmentStats.desiredBoresightAzimuthDeg' 2>/dev/null)
-
-    # uptime: Gen3 puts it in deviceState, older firmware in deviceInfo
-    uptime=$(echo "$raw"     | jsonfilter -e '@.dishGetStatus.deviceState.uptimeS'                 2>/dev/null)
-    [ -z "$uptime" ] && \
-    uptime=$(echo "$raw"     | jsonfilter -e '@.dishGetStatus.deviceInfo.upTimeS'                  2>/dev/null)
-
-    # alerts — proto3 omits false booleans so absent == false == healthy
-    al_heating=$(echo "$raw"      | jsonfilter -e '@.dishGetStatus.alerts.isHeating'                    2>/dev/null)
-    al_throttle=$(echo "$raw"     | jsonfilter -e '@.dishGetStatus.alerts.thermalThrottle'              2>/dev/null)
-    al_shutdown=$(echo "$raw"     | jsonfilter -e '@.dishGetStatus.alerts.thermalShutdown'              2>/dev/null)
-    al_psu_throttle=$(echo "$raw" | jsonfilter -e '@.dishGetStatus.alerts.powerSupplyThermalThrottle'   2>/dev/null)
-    al_motors=$(echo "$raw"       | jsonfilter -e '@.dishGetStatus.alerts.motorsStuck'                  2>/dev/null)
-    al_mast=$(echo "$raw"         | jsonfilter -e '@.dishGetStatus.alerts.mastNotVertical'              2>/dev/null)
-    al_slow_eth=$(echo "$raw"     | jsonfilter -e '@.dishGetStatus.alerts.slowEthernetSpeeds'           2>/dev/null)
-    al_roaming=$(echo "$raw"      | jsonfilter -e '@.dishGetStatus.alerts.roaming'                      2>/dev/null)
-    sw_update_state=$(echo "$raw" | jsonfilter -e '@.dishGetStatus.softwareUpdateState'                 2>/dev/null)
-    currently_obstructed=$(echo "$raw" | jsonfilter -e '@.dishGetStatus.currentlyObstructed'            2>/dev/null)
 
     printf '{"available":true'
     printf ',"state":"%s"'              "$(json_str "$state")"
@@ -189,15 +203,7 @@ query_dish_status() {
     printf ',"al_slow_eth":"%s"'             "${al_slow_eth:-false}"
     printf ',"al_roaming":"%s"'              "${al_roaming:-false}"
     printf ',"disablement":"%s"'             "$(json_str "${disablement:-OKAY}")"
-
-    # Query dish config for heater mode (best-effort)
-    local cfg_raw heater_mode
-    cfg_raw=$(grpcurl -plaintext -max-time 5 \
-        -d '{"dish_get_config":{}}' \
-        "${DISH_IP}:${DISH_PORT}" "${DISH_SVC}" 2>/dev/null)
-    heater_mode=$(echo "$cfg_raw" | jsonfilter -e '@.dishGetConfig.dishConfig.snowMeltMode' 2>/dev/null)
     printf ',"heater_mode":"%s"'             "$(json_str "${heater_mode:-}")"
-
     printf '}'
 }
 
@@ -267,14 +273,15 @@ get_system_status() {
     board_soc=$(echo "$_board"    | jsonfilter -e '@.model'           2>/dev/null || echo "")
     board_target=$(echo "$_board" | jsonfilter -e '@.release.target'  2>/dev/null || echo "")
 
-    # Parallel pings — write to temp files, wait
+    # Parallel pings — PID-namespaced temp files avoid concurrent-call races
+    local tmp_p8="/tmp/.sl_p8.$$" tmp_p1="/tmp/.sl_p1.$$"
     ping -c 1 -W 2 8.8.8.8 2>/dev/null \
-        | sed -n 's|.*= [0-9.]*/\([0-9.]*\)/.*|\1|p' > /tmp/.sl_p8 &
+        | sed -n 's|.*= [0-9.]*/\([0-9.]*\)/.*|\1|p' > "$tmp_p8" &
     ping -c 1 -W 2 1.0.0.1 2>/dev/null \
-        | sed -n 's|.*= [0-9.]*/\([0-9.]*\)/.*|\1|p' > /tmp/.sl_p1 &
+        | sed -n 's|.*= [0-9.]*/\([0-9.]*\)/.*|\1|p' > "$tmp_p1" &
     wait
-    ping_8=$(cat /tmp/.sl_p8 2>/dev/null); rm -f /tmp/.sl_p8
-    ping_1=$(cat /tmp/.sl_p1 2>/dev/null); rm -f /tmp/.sl_p1
+    ping_8=$(cat "$tmp_p8" 2>/dev/null); rm -f "$tmp_p8"
+    ping_1=$(cat "$tmp_p1" 2>/dev/null); rm -f "$tmp_p1"
 
     printf '{'
     printf '"wan_dev":"%s",'             "$(json_str "$wan_dev")"
@@ -332,6 +339,7 @@ reboot_dish() {
 # ── disable hardware offloading ───────────────────────────────────────────────
 
 disable_hw_offloading() {
+    uci set firewall.@defaults[0].flow_offloading=1
     uci set firewall.@defaults[0].flow_offloading_hw=0
     uci commit firewall
     service firewall restart >/dev/null 2>&1
@@ -432,7 +440,7 @@ get_router_stats() {
 }
 
 # ── connected devices ────────────────────────────────────────────────────────
-# Uses ip neigh (ARP/NDP) on br-lan, enriched with hostnames from DHCP leases.
+# Uses ip neigh (ARP) on br-lan, enriched with hostnames from DHCP leases.
 
 get_devices() {
     local leases_file="/tmp/dhcp.leases"
@@ -454,8 +462,13 @@ get_devices() {
         state = $NF
         if (state == "FAILED" || state == "NOARP") next
         if ($1 ~ /:/) next
-        ip  = $1
-        mac = $3
+        ip = $1
+        # Find MAC robustly: field immediately after "lladdr" keyword.
+        # Field positions vary between iproute2 versions depending on whether
+        # "dev <name>" is included in the output line.
+        mac = ""
+        for (i = 1; i <= NF; i++) if ($i == "lladdr") { mac = $(i+1); break }
+        if (mac == "") next
         hostname = (tolower(mac) in mac_host) ? mac_host[tolower(mac)] : ""
         gsub(/"/, "\\\"", hostname)
         active = (state == "REACHABLE" || state == "DELAY" || state == "PROBE") ? "true" : "false"
@@ -499,11 +512,19 @@ set_static_ip() {
         return
     fi
 
-    # Basic IP format validation
-    echo "$ip" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' || {
+    # Validate IP: 4 octets, each 0-255
+    local valid_ip=1
+    echo "$ip" | grep -qE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' || valid_ip=0
+    if [ "$valid_ip" = "1" ]; then
+        echo "$ip" | awk -F. '{for(i=1;i<=4;i++) if($i+0>255) exit 1}' || valid_ip=0
+    fi
+    if [ "$valid_ip" = "0" ]; then
         printf '{"success":false,"error":"invalid IP"}'
         return
-    }
+    fi
+
+    # Sanitize hostname: allow only characters valid in a DNS label
+    [ -n "$hostname" ] && hostname=$(printf '%s' "$hostname" | tr -cd 'a-zA-Z0-9._-')
 
     # Find existing host section for this MAC
     section=$(uci show dhcp 2>/dev/null | awk -F= '/=host$/ {sub(/^dhcp\./, "", $1); print $1}' | while read sec; do

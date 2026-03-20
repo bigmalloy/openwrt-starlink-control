@@ -209,11 +209,11 @@ else
         || true
 fi
 
-# Remove any existing starlink-setup block to avoid duplicates on re-run
+# Remove any existing starlink-setup block to avoid duplicates on re-run.
+# Uses a bracketed end-marker so user settings after the block are preserved.
 if grep -q "# --- starlink-setup ---" /etc/sysctl.conf 2>/dev/null; then
     echo "      Existing starlink-setup block found in sysctl.conf, replacing..."
-    # Remove from marker to end of file then re-append
-    sed -i '/# --- starlink-setup ---/,$d' /etc/sysctl.conf
+    sed -i '/# --- starlink-setup ---/,/# --- \/starlink-setup ---/d' /etc/sysctl.conf
 fi
 
 # Pick best available congestion control: hybla > cdg > bbr > cubic
@@ -273,6 +273,7 @@ net.netfilter.nf_conntrack_udp_timeout = 60
 net.netfilter.nf_conntrack_udp_timeout_stream = 180
 net.netfilter.nf_conntrack_icmp_timeout = 30
 net.netfilter.nf_conntrack_generic_timeout = 600
+# --- /starlink-setup ---
 EOF
 
 sysctl -p /etc/sysctl.conf >/dev/null 2>&1 || true
