@@ -54,6 +54,16 @@ json_str() {
     printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n\r\t' '   '
 }
 
+# jsonfilter outputs 1/0 for JSON booleans; normalize to true/false.
+# Sets variable named $1 in the caller. $2=raw value, $3=default (default: "unknown")
+bool_norm() {
+    case "$2" in
+        1|true)  eval "$1=true"  ;;
+        0|false) eval "$1=false" ;;
+        *)       eval "$1=${3:-unknown}" ;;
+    esac
+}
+
 get_ping_avg() {
     # Returns average RTT in ms, or empty string on failure
     ping -c 1 -W 2 "$1" 2>/dev/null \
@@ -187,7 +197,19 @@ query_dish_status() {
     printf ',"fraction_obstructed":%s'  "${obst:-0}"
     printf ',"downlink_bps":%s'         "${downlink:-0}"
     printf ',"uplink_bps":%s'           "${uplink:-0}"
-    printf ',"snr_above_noise":"%s"'    "${snr_bool:-unknown}"
+    # Normalize jsonfilter booleans (1/0 → true/false) without subshells
+    bool_norm _snr              "${snr_bool}"
+    bool_norm _obstructed       "${currently_obstructed}" false
+    bool_norm _al_heating       "${al_heating}"           false
+    bool_norm _al_throttle      "${al_throttle}"          false
+    bool_norm _al_shutdown      "${al_shutdown}"          false
+    bool_norm _al_psu_throttle  "${al_psu_throttle}"      false
+    bool_norm _al_motors        "${al_motors}"            false
+    bool_norm _al_mast          "${al_mast}"              false
+    bool_norm _al_slow_eth      "${al_slow_eth}"          false
+    bool_norm _al_roaming       "${al_roaming}"           false
+
+    printf ',"snr_above_noise":"%s"'    "$_snr"
     printf ',"eth_speed_mbps":%s'       "${eth_speed:-0}"
     printf ',"gps_sats":%s'             "${gps_sats:-0}"
     printf ',"elevation_deg":%s'              "${elevation:-0}"
@@ -198,17 +220,17 @@ query_dish_status() {
     printf ',"bore_azimuth_deg":%s'          "${bore_az:-0}"
     printf ',"desired_azimuth_deg":%s'       "${des_az:-0}"
     printf ',"sw_update_state":"%s"'         "$(json_str "${sw_update_state:-IDLE}")"
-    printf ',"currently_obstructed":"%s"'    "${currently_obstructed:-false}"
-    printf ',"al_heating":"%s"'              "${al_heating:-false}"
-    printf ',"al_throttle":"%s"'             "${al_throttle:-false}"
-    printf ',"al_shutdown":"%s"'             "${al_shutdown:-false}"
-    printf ',"al_psu_throttle":"%s"'         "${al_psu_throttle:-false}"
-    printf ',"al_motors":"%s"'               "${al_motors:-false}"
-    printf ',"al_mast":"%s"'                 "${al_mast:-false}"
-    printf ',"al_slow_eth":"%s"'             "${al_slow_eth:-false}"
-    printf ',"al_roaming":"%s"'              "${al_roaming:-false}"
+    printf ',"currently_obstructed":"%s"'    "$_obstructed"
+    printf ',"al_heating":"%s"'              "$_al_heating"
+    printf ',"al_throttle":"%s"'             "$_al_throttle"
+    printf ',"al_shutdown":"%s"'             "$_al_shutdown"
+    printf ',"al_psu_throttle":"%s"'         "$_al_psu_throttle"
+    printf ',"al_motors":"%s"'               "$_al_motors"
+    printf ',"al_mast":"%s"'                 "$_al_mast"
+    printf ',"al_slow_eth":"%s"'             "$_al_slow_eth"
+    printf ',"al_roaming":"%s"'              "$_al_roaming"
     printf ',"disablement":"%s"'             "$(json_str "${disablement:-OKAY}")"
-    printf ',"heater_mode":"%s"'             "$(json_str "${heater_mode:-}")"
+    printf ',"heater_mode":"%s"'             "$(json_str "${heater_mode:-auto}")"
     printf '}'
 }
 

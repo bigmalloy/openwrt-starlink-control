@@ -388,14 +388,11 @@ function buildAlertsCard(d) {
 	body += '<button class="sl-reboot-btn" id="sl-reboot-btn" onclick="starlinkRebootDish(this)">⟳ Reboot Dish</button>';
 
 	// Heater status (read-only — dish setConfig requires SpaceX auth)
-	if (d.heater_mode === 'ALWAYS_ON' || d.heater_mode === 'ALWAYS_OFF' || d.heater_mode === 'MANUAL') {
-		var heaterLabel = d.heater_mode === 'ALWAYS_ON' ? 'on' : d.heater_mode === 'ALWAYS_OFF' ? 'off' : 'auto';
-		var heaterStyle = d.heater_mode === 'ALWAYS_ON' ? 'warn' : d.heater_mode === 'ALWAYS_OFF' ? 'muted' : 'ok';
-		body += '<div class="sl-heater-row">' +
-			'<span>❄ Snow melt heater</span>' +
-			badge(heaterLabel, heaterStyle) +
-			'</div>';
-	}
+	var heaterLabel = d.heater_mode === 'ALWAYS_ON'  ? 'always on'  :
+	                  d.heater_mode === 'ALWAYS_OFF' ? 'always off' : 'auto';
+	var heaterStyle = d.heater_mode === 'ALWAYS_ON'  ? 'warn'  :
+	                  d.heater_mode === 'ALWAYS_OFF' ? 'muted' : 'ok';
+	body += row('❄ Snow melt heater', badge(heaterLabel, heaterStyle));
 
 	return card('Alerts', '🔔', body);
 }
@@ -418,11 +415,7 @@ function buildIPv6Card(s, d) {
 			body += '<div class="sl-ipv6-warn">' +
 				'<div class="sl-ipv6-warn-title">⚠ No IPv6 prefix from dish</div>' +
 				'<div class="sl-ipv6-warn-body">WAN link is up but no /56 prefix received. ' +
-				'This is a known Starlink firmware bug — the dish DHCPv6-PD server sometimes ' +
-				'fails to restart after the nightly 3 am update reboot, stopping all IPv6 ' +
-				'to your network. IPv4 continues to work normally.<br><br>' +
-				'<strong>Fix:</strong> hard power cycle the dish (unplug 10 s, replug). ' +
-				'IPv6 returns within ~2 minutes. A software reboot does not fix this.</div>' +
+				'Starlink dish firmware updates sometimes break IPv6.</div>' +
 				'</div>';
 		} else {
 			// No link-local either — WAN interface not up
