@@ -818,48 +818,46 @@ function buildDNSCard(s) {
 		body += row('IPv6 DNS', badge('none configured', 'err'));
 	}
 
-	// DNS mode dropdown — exact preset matching against both IPv4 and IPv6.
-	// Normalise whitespace so comparison is stable regardless of how UCI stores it.
-	// Any deviation from an exact preset (added/changed servers, IPv4/IPv6 mismatch)
-	// is classified as Custom so the user can see their config was modified.
-	var wan_dns  = (s.wan_dns  || '').trim().replace(/\s+/g, ' ');
-	var wan6_dns = (s.wan6_dns || '').trim().replace(/\s+/g, ' ');
-	var DNS_PRESETS = {
-		'default': {
-			v4: '1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4',
-			v6: '2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844'
-		},
-		'family': {
-			v4: '1.1.1.3 1.0.0.3',
-			v6: '2606:4700:4700::1113 2606:4700:4700::1003'
-		},
-		'malware': {
-			v4: '1.1.1.2 1.0.0.2',
-			v6: '2606:4700:4700::1112 2606:4700:4700::1002'
-		}
-	};
+	// DNS mode detection.
+	// peerdns=1 means no static DNS override — router accepts ISP-assigned servers.
+	// Check this FIRST: when peerdns is on, wan_dns may contain runtime ISP servers
+	// read from resolv.conf.auto (not static UCI config), so content-matching would
+	// wrongly classify it as Custom.
 	var dnsMode = null;
-	var presetOrder = ['family', 'malware', 'default'];
-	for (var pi = 0; pi < presetOrder.length; pi++) {
-		var pk = presetOrder[pi];
-		var p = DNS_PRESETS[pk];
-		var v4ok = wan_dns  === p.v4 || wan_dns  === '';
-		var v6ok = wan6_dns === p.v6 || wan6_dns === '';
-		// Both must match (or be absent), and at least one must be set
-		if (v4ok && v6ok && (wan_dns !== '' || wan6_dns !== '')) {
-			dnsMode = pk;
-			break;
+	if (s.wan_peerdns !== '0') {
+		dnsMode = 'starlink';
+	} else {
+		// peerdns off — match static DNS against known presets.
+		// Normalise whitespace so comparison is stable regardless of UCI storage.
+		var wan_dns  = (s.wan_dns  || '').trim().replace(/\s+/g, ' ');
+		var wan6_dns = (s.wan6_dns || '').trim().replace(/\s+/g, ' ');
+		var DNS_PRESETS = {
+			'default': {
+				v4: '1.1.1.1 1.0.0.1 8.8.8.8 8.8.4.4',
+				v6: '2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844'
+			},
+			'family': {
+				v4: '1.1.1.3 1.0.0.3',
+				v6: '2606:4700:4700::1113 2606:4700:4700::1003'
+			},
+			'malware': {
+				v4: '1.1.1.2 1.0.0.2',
+				v6: '2606:4700:4700::1112 2606:4700:4700::1002'
+			}
+		};
+		var presetOrder = ['family', 'malware', 'default'];
+		for (var pi = 0; pi < presetOrder.length; pi++) {
+			var pk = presetOrder[pi];
+			var p = DNS_PRESETS[pk];
+			var v4ok = wan_dns  === p.v4 || wan_dns  === '';
+			var v6ok = wan6_dns === p.v6 || wan6_dns === '';
+			if (v4ok && v6ok && (wan_dns !== '' || wan6_dns !== '')) {
+				dnsMode = pk;
+				break;
+			}
 		}
-	}
-	if (!dnsMode) {
-		if (wan_dns !== '' || wan6_dns !== '') {
-			// Non-empty DNS that doesn't exactly match any preset
-			dnsMode = 'custom';
-		} else if (s.wan_peerdns !== '0') {
-			// No static DNS configured, peerdns on → using ISP DNS
-			dnsMode = 'starlink';
-		} else {
-			dnsMode = 'default';
+		if (!dnsMode) {
+			dnsMode = (wan_dns !== '' || wan6_dns !== '') ? 'custom' : 'default';
 		}
 	}
 
