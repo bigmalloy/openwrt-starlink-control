@@ -191,8 +191,9 @@ function alertRow(label, value, isAlert) {
 // ── CSS ───────────────────────────────────────────────────────────────────────
 
 var CSS = '<style>' +
-':root{--sl-bg:#0d1117;--sl-surface:#161b22;--sl-border:#30363d;--sl-text:#c9d1d9;--sl-muted:#8b949e;--sl-accent:#58a6ff;--sl-green:#3fb950;--sl-yellow:#d29922;--sl-red:#f85149}' +
-'.sl-wrap{background:var(--sl-bg);color:var(--sl-text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;padding:20px;border-radius:8px;min-height:400px}' +
+':root{--sl-surface:rgba(0,0,0,0.04);--sl-border:rgba(0,0,0,0.12);--sl-text:#24292f;--sl-muted:#57606a;--sl-accent:#0969da;--sl-green:#1a7f37;--sl-yellow:#9a6700;--sl-red:#cf222e;--sl-stripe:rgba(0,0,0,0.07);--sl-inset:rgba(0,0,0,0.05);--sl-warn-bg:rgba(207,34,46,0.08)}' +
+'@media (prefers-color-scheme:dark){:root{--sl-surface:#161b22;--sl-border:#30363d;--sl-text:#c9d1d9;--sl-muted:#8b949e;--sl-accent:#58a6ff;--sl-green:#3fb950;--sl-yellow:#d29922;--sl-red:#f85149;--sl-stripe:#21262d;--sl-inset:#1c2128;--sl-warn-bg:#2d1215}}' +
+'.sl-wrap{padding:20px;border-radius:8px;min-height:400px}' +
 '.sl-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--sl-border)}' +
 '.sl-title{font-size:1.3em;font-weight:700;color:var(--sl-accent);display:flex;align-items:center;gap:8px}' +
 '.sl-meta{font-size:0.8em;color:var(--sl-muted);display:flex;align-items:center;gap:10px}' +
@@ -202,7 +203,7 @@ var CSS = '<style>' +
 '.sl-card-hd{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--sl-border);font-size:0.88em;font-weight:600;color:var(--sl-muted);text-transform:uppercase;letter-spacing:.06em}' +
 '.sl-card-icon{font-size:1.1em}' +
 '.sl-card-bd{padding:12px 14px}' +
-'.sl-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #21262d;font-size:0.88em;gap:8px}' +
+'.sl-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--sl-stripe);font-size:0.88em;gap:8px}' +
 '.sl-row:last-child{border-bottom:none}' +
 '.sl-lbl{color:var(--sl-muted);white-space:nowrap}' +
 '.sl-val{font-weight:500;text-align:right;word-break:break-all;color:var(--sl-text)}' +
@@ -211,24 +212,24 @@ var CSS = '<style>' +
 '.sl-big-num{font-size:1.5em;font-weight:700;color:var(--sl-text)}' +
 '.sl-big-lbl{font-size:0.75em;color:var(--sl-muted);margin-top:2px}' +
 '.sl-cfg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}' +
-'.sl-cfg-item{background:#1c2128;border:1px solid var(--sl-border);border-radius:6px;padding:8px 10px}' +
+'.sl-cfg-item{background:var(--sl-inset);border:1px solid var(--sl-border);border-radius:6px;padding:8px 10px}' +
 '.sl-cfg-k{font-size:0.75em;color:var(--sl-muted);margin-bottom:4px}' +
 '.sl-cfg-v{font-size:0.85em;font-weight:600}' +
-'.sl-qdisc{font-family:monospace;font-size:0.78em;color:var(--sl-muted);padding:8px;background:#1c2128;border-radius:4px;margin-top:10px;word-break:break-all}' +
+'.sl-qdisc{font-family:monospace;font-size:0.78em;color:var(--sl-muted);padding:8px;background:var(--sl-inset);border-radius:4px;margin-top:10px;word-break:break-all}' +
 '.sl-na{color:var(--sl-muted);font-size:0.85em;font-style:italic;text-align:center;padding:12px 0}' +
-'.sl-note{background:#1c2128;border:1px solid var(--sl-border);border-left:3px solid var(--sl-accent);border-radius:0 4px 4px 0;padding:10px 12px;font-size:0.82em;color:var(--sl-muted);margin-top:8px}' +
-'.sl-note code{background:#0d1117;padding:1px 5px;border-radius:3px;font-family:monospace;color:var(--sl-accent)}' +
+'.sl-note{background:var(--sl-inset);border:1px solid var(--sl-border);border-left:3px solid var(--sl-accent);border-radius:0 4px 4px 0;padding:10px 12px;font-size:0.82em;color:var(--sl-muted);margin-top:8px}' +
+'.sl-note code{background:var(--sl-stripe);padding:1px 5px;border-radius:3px;font-family:monospace;color:var(--sl-accent)}' +
 '.sl-alert-row{margin-top:4px;font-size:0.85em;color:var(--sl-yellow)}' +
 '.sl-align-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px 0}' +
-'.sl-align-item{text-align:center;background:#1c2128;border:1px solid var(--sl-border);border-radius:6px;padding:12px 8px}' +
+'.sl-align-item{text-align:center;background:var(--sl-inset);border:1px solid var(--sl-border);border-radius:6px;padding:12px 8px}' +
 '.sl-align-val{font-size:1.4em;font-weight:700;color:var(--sl-text);letter-spacing:-0.01em}' +
 '.sl-align-lbl{font-size:0.78em;color:var(--sl-muted);margin-top:4px}' +
 '.sl-align-ok{font-size:1.1em;font-weight:600;color:var(--sl-green);text-align:center;padding:8px}' +
-'.sl-reboot-btn{width:100%;margin-top:12px;padding:8px 0;background:#21262d;border:1px solid #f0883e;color:#f0883e;border-radius:6px;font-size:0.88em;font-weight:600;cursor:pointer;letter-spacing:.03em}' +
-'.sl-reboot-btn:hover{background:#2d1f0e;border-color:#f0883e}' +
+'.sl-reboot-btn{width:100%;margin-top:12px;padding:8px 0;background:var(--sl-inset);border:1px solid #f0883e;color:#f0883e;border-radius:6px;font-size:0.88em;font-weight:600;cursor:pointer;letter-spacing:.03em}' +
+'.sl-reboot-btn:hover{background:rgba(240,136,62,0.12);border-color:#f0883e}' +
 '.sl-reboot-btn:disabled{opacity:0.4;cursor:not-allowed}' +
 '.sl-al-list{display:grid;grid-template-columns:1fr 1fr;gap:0}' +
-'.sl-al-item{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #21262d;font-size:0.87em}' +
+'.sl-al-item{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--sl-stripe);font-size:0.87em}' +
 '.sl-al-item:nth-child(odd):last-child{grid-column:1/-1}' +
 '.sl-al-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}' +
 '.sl-al-ok{background:var(--sl-green)}' +
@@ -238,12 +239,12 @@ var CSS = '<style>' +
 '.sl-cfg-btn{width:100%;margin-top:12px;padding:8px 0;border:1px solid;border-radius:6px;font-size:0.88em;font-weight:600;letter-spacing:.03em}' +
 '.sl-cfg-btn:hover:not(:disabled){opacity:0.85;cursor:pointer}' +
 '.sl-cfg-btn:disabled{cursor:default}' +
-'.sl-heater-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:9px 0;border-top:1px solid #21262d;font-size:0.88em;color:var(--sl-text)}' +
+'.sl-heater-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:9px 0;border-top:1px solid var(--sl-stripe);font-size:0.88em;color:var(--sl-text)}' +
 '.sl-heater-chk{width:16px;height:16px;cursor:pointer;accent-color:#2ea043}' +
 '.sl-heater-chk:disabled{cursor:not-allowed;opacity:0.4}' +
-'.sl-ipv6-warn{background:#2d1215;border:1px solid #f85149;border-left:3px solid #f85149;border-radius:0 4px 4px 0;padding:10px 12px;font-size:0.84em;color:#f85149;margin-bottom:10px}' +
+'.sl-ipv6-warn{background:var(--sl-warn-bg);border:1px solid var(--sl-red);border-left:3px solid var(--sl-red);border-radius:0 4px 4px 0;padding:10px 12px;font-size:0.84em;color:var(--sl-red);margin-bottom:10px}' +
 '.sl-ipv6-warn-title{font-weight:700;margin-bottom:4px}' +
-'.sl-ipv6-warn-body{color:#ccc;line-height:1.5}' +
+'.sl-ipv6-warn-body{color:var(--sl-text);line-height:1.5}' +
 '@keyframes sl-fan-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}' +
 '</style>';
 
@@ -528,13 +529,13 @@ function svgGauge(pct, label, sublabel) {
 	var arc  = Math.min(Math.max(pct, 0), 100) / 100 * circ;
 	var color = pct > 85 ? 'var(--sl-red)' : pct > 65 ? 'var(--sl-yellow)' : 'var(--sl-green)';
 	return '<svg viewBox="0 0 100 100" style="width:130px;height:130px;display:block">' +
-		'<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="#21262d" stroke-width="12"/>' +
+		'<circle cx="50" cy="50" r="' + r + '" style="fill:none;stroke:var(--sl-stripe)" stroke-width="12"/>' +
 		'<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="12"' +
 		' stroke-dasharray="' + arc.toFixed(2) + ' ' + circ.toFixed(2) + '"' +
 		' stroke-linecap="round" transform="rotate(-90 50 50)"/>' +
-		'<text x="50" y="47" text-anchor="middle" font-size="18" font-weight="700" fill="#c9d1d9">' + Math.round(pct) + '%</text>' +
-		'<text x="50" y="62" text-anchor="middle" font-size="10" fill="#8b949e">' + label + '</text>' +
-		(sublabel ? '<text x="50" y="74" text-anchor="middle" font-size="8.5" fill="#6e7781">' + sublabel + '</text>' : '') +
+		'<text x="50" y="47" text-anchor="middle" font-size="18" font-weight="700" style="fill:var(--sl-text)">' + Math.round(pct) + '%</text>' +
+		'<text x="50" y="62" text-anchor="middle" font-size="10" style="fill:var(--sl-muted)">' + label + '</text>' +
+		(sublabel ? '<text x="50" y="74" text-anchor="middle" font-size="8.5" style="fill:var(--sl-muted)">' + sublabel + '</text>' : '') +
 		'</svg>';
 }
 
@@ -546,7 +547,7 @@ function loadBar(load, maxLoad, label) {
 		'<span style="color:var(--sl-muted)">' + label + '</span>' +
 		'<span style="font-weight:600">' + load.toFixed(2) + '</span>' +
 		'</div>' +
-		'<div style="height:6px;background:#21262d;border-radius:3px;overflow:hidden">' +
+		'<div style="height:6px;background:var(--sl-stripe);border-radius:3px;overflow:hidden">' +
 		'<div style="height:100%;width:' + pct.toFixed(1) + '%;background:' + color + ';border-radius:3px;transition:width .6s ease"></div>' +
 		'</div></div>';
 }
@@ -561,15 +562,15 @@ function fanIcon(state, maxState) {
 	var pct = on ? state / maxState : 0;
 	// Duration: 0.4s at full, 2.5s at state 1
 	var dur = on ? (2.5 - pct * 2.1).toFixed(2) + 's' : '0s';
-	var c   = on ? (pct > 0.6 ? 'var(--sl-red)' : pct > 0.3 ? 'var(--sl-yellow)' : 'var(--sl-green)') : '#444c56';
+	var c   = on ? (pct > 0.6 ? 'var(--sl-red)' : pct > 0.3 ? 'var(--sl-yellow)' : 'var(--sl-green)') : 'var(--sl-muted)';
 	var anim = on ? ('sl-fan-spin ' + dur + ' linear infinite') : 'none';
 	return '<svg viewBox="0 0 24 24" width="18" height="18" ' +
-		'style="vertical-align:middle;animation:' + anim + ';flex-shrink:0">' +
-		'<circle cx="12" cy="12" r="2.8" fill="' + c + '"/>' +
-		'<path d="M12 2c2 0 3.5 4 1 8C10.5 6 10 2 12 2z" fill="' + c + '"/>' +
-		'<path d="M22 12c0 2-4 3.5-8 1 4-2.5 6-3 8-1z" fill="' + c + '"/>' +
-		'<path d="M12 22c-2 0-3.5-4-1-8 2.5 4 3 6 1 8z" fill="' + c + '"/>' +
-		'<path d="M2 12c0-2 4-3.5 8-1-4 2.5-6 3-8 1z" fill="' + c + '"/>' +
+		'style="vertical-align:middle;animation:' + anim + ';flex-shrink:0;color:' + c + '">' +
+		'<circle cx="12" cy="12" r="2.8" fill="currentColor"/>' +
+		'<path d="M12 2c2 0 3.5 4 1 8C10.5 6 10 2 12 2z" fill="currentColor"/>' +
+		'<path d="M22 12c0 2-4 3.5-8 1 4-2.5 6-3 8-1z" fill="currentColor"/>' +
+		'<path d="M12 22c-2 0-3.5-4-1-8 2.5 4 3 6 1 8z" fill="currentColor"/>' +
+		'<path d="M2 12c0-2 4-3.5 8-1-4 2.5-6 3-8 1z" fill="currentColor"/>' +
 		'</svg>';
 }
 
@@ -606,7 +607,7 @@ function buildRouterStatsCard(rs, s) {
 		var fanOn  = fanState > 0;
 		var fanPct = Math.round(fanState / fanMax * 100);
 		var fanLabel = fanOn ? fanState + '\u00a0/\u00a0' + fanMax + '\u00a0(' + fanPct + '%)' : 'off';
-		body += '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 2px 10px;border-bottom:1px solid #21262d;margin-bottom:10px">';
+		body += '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 2px 10px;border-bottom:1px solid var(--sl-stripe);margin-bottom:10px">';
 		body += '<span style="display:flex;align-items:center;gap:8px;font-size:0.88em;color:var(--sl-muted)">' +
 			fanIcon(fanState, fanMax) +
 			'<span>Fan</span></span>';
@@ -627,7 +628,7 @@ function buildRouterStatsCard(rs, s) {
 
 	// ── Memory stacked bar ──────────────────────────────────────────────────
 	body += '<div style="font-size:0.78em;color:var(--sl-muted);margin-bottom:4px;letter-spacing:.03em">MEMORY BREAKDOWN</div>';
-	body += '<div style="height:8px;background:#21262d;border-radius:4px;overflow:hidden;margin-bottom:6px">' +
+	body += '<div style="height:8px;background:var(--sl-stripe);border-radius:4px;overflow:hidden;margin-bottom:6px">' +
 		'<div style="display:flex;height:100%">' +
 		'<div style="width:' + memUsedPct.toFixed(1) + '%;background:var(--sl-green);transition:width .6s ease"></div>' +
 		'<div style="width:' + memCachePct.toFixed(1) + '%;background:#388bfd;transition:width .6s ease"></div>' +
@@ -635,7 +636,7 @@ function buildRouterStatsCard(rs, s) {
 	body += '<div style="display:flex;gap:14px;font-size:0.8em;margin-bottom:10px;flex-wrap:wrap">';
 	body += '<span><span style="display:inline-block;width:9px;height:9px;background:var(--sl-green);border-radius:2px;margin-right:4px;vertical-align:middle"></span>Used\u00a0' + fmtKB(memUsed) + '</span>';
 	body += '<span><span style="display:inline-block;width:9px;height:9px;background:#388bfd;border-radius:2px;margin-right:4px;vertical-align:middle"></span>Cache\u00a0' + fmtKB(memCache) + '</span>';
-	body += '<span><span style="display:inline-block;width:9px;height:9px;background:#21262d;border:1px solid #444;border-radius:2px;margin-right:4px;vertical-align:middle"></span>Free\u00a0' + fmtKB(memFree) + '</span>';
+	body += '<span><span style="display:inline-block;width:9px;height:9px;background:var(--sl-stripe);border:1px solid var(--sl-border);border-radius:2px;margin-right:4px;vertical-align:middle"></span>Free\u00a0' + fmtKB(memFree) + '</span>';
 	body += '</div>';
 
 	// Swap (only if present)
@@ -728,7 +729,7 @@ function buildDevicesCard(devData, s) {
 		var d    = list[j];
 		var name = d.hostname ? d.hostname : d.ip;
 		var sub  = d.hostname ? d.ip : '';
-		var dotC   = d.active ? 'var(--sl-green)' : '#444c56';
+		var dotC   = d.active ? 'var(--sl-green)' : 'var(--sl-muted)';
 		var stateC = d.active ? 'ok' : 'off';
 		var macKey = d.mac.toLowerCase();
 		var staticIp = staticLeases[macKey] || '';
@@ -747,8 +748,8 @@ function buildDevicesCard(devData, s) {
 
 		// Right: MAC + state badge + static IP button
 		var pinStyle = staticIp
-			? 'background:#1c2128;border:1px solid #2ea043;color:#3fb950'
-			: 'background:#1c2128;border:1px solid #444;color:#8b949e';
+			? 'background:var(--sl-inset);border:1px solid var(--sl-green);color:var(--sl-green)'
+			: 'background:var(--sl-inset);border:1px solid var(--sl-border);color:var(--sl-muted)';
 		var pinLabel = staticIp ? ('📌\u00a0' + staticIp) : '📌\u00a0Static IP';
 		body += '<span style="display:flex;align-items:center;gap:6px;flex-shrink:0">' +
 			'<span style="color:var(--sl-muted);font-size:0.78em;font-family:monospace">' + d.mac + '</span>' +
@@ -847,8 +848,8 @@ function buildDNSCard(s) {
 
 	body += '<div style="margin-top:12px;font-size:0.78em;color:var(--sl-muted);text-transform:uppercase;letter-spacing:.05em;padding:4px 0 2px">DNS Mode</div>';
 	body += '<select id="sl-dns-mode" onchange="starlinkSetDnsMode(this)" ' +
-		'style="width:100%;padding:7px 10px;background:#21262d;border:1px solid #30363d;' +
-		'border-radius:6px;color:#c9d1d9;font-size:0.88em;cursor:pointer;outline:none">';
+		'style="width:100%;padding:7px 10px;background:var(--sl-inset);border:1px solid var(--sl-border);' +
+		'border-radius:6px;color:var(--sl-text);font-size:0.88em;cursor:pointer;outline:none">';
 	var modeKeys = ['default', 'starlink', 'family', 'malware'];
 	for (var mi = 0; mi < modeKeys.length; mi++) {
 		var mk = modeKeys[mi];
@@ -906,7 +907,7 @@ function buildConfigCard(s, cs) {
 	var isHome = s.luci_home === '1';
 	var homeStyle = isHome
 		? 'background:#1a7f37;border-color:#2ea043;color:#fff'
-		: 'background:#21262d;border-color:#6e7781;color:#8b949e';
+		: 'background:var(--sl-inset);border-color:var(--sl-muted);color:var(--sl-muted)';
 	var homeText = isHome ? '🏠 Default Home Page (click to revert)' : '🏠 Set as Default Home Page';
 	body += '<button class="sl-cfg-btn" style="' + homeStyle + ';margin-top:8px" ' +
 		'data-ishome="' + (isHome ? 'true' : 'false') + '" ' +
@@ -935,7 +936,7 @@ function buildConfigCard(s, cs) {
 		btnDisabled = 'disabled';
 	} else {
 		btnText     = 'Turn Starlink Config On';
-		btnStyle    = 'background:#21262d;border-color:#388bfd;color:#388bfd';
+		btnStyle    = 'background:var(--sl-inset);border-color:#388bfd;color:#388bfd';
 		btnDisabled = '';
 	}
 
@@ -1071,9 +1072,9 @@ window.starlinkToggleHome = function(btn) {
 		var nowHome = !isHome;
 		btn.setAttribute('data-ishome', nowHome ? 'true' : 'false');
 		btn.textContent = nowHome ? '🏠 Default Home Page (click to revert)' : '🏠 Set as Default Home Page';
-		btn.style.background  = nowHome ? '#1a7f37' : '#21262d';
-		btn.style.borderColor = nowHome ? '#2ea043' : '#6e7781';
-		btn.style.color       = nowHome ? '#fff'    : '#8b949e';
+		btn.style.background  = nowHome ? '#1a7f37' : 'var(--sl-inset)';
+		btn.style.borderColor = nowHome ? '#2ea043' : 'var(--sl-muted)';
+		btn.style.color       = nowHome ? '#fff'    : 'var(--sl-muted)';
 		btn.disabled = false;
 	}).catch(function() {
 		btn.disabled = false;
