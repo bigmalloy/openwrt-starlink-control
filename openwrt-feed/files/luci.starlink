@@ -473,11 +473,27 @@ get_router_stats() {
 
 get_devices() {
     local leases_file="/tmp/dhcp.leases"
+    local uci_names_file="/tmp/sl-uci-names-$$"
 
     # Collect all bridge interfaces; fall back to lan dev if ip doesn't support type filter
     local _br_devs
     _br_devs=$(ip -br link show type bridge 2>/dev/null | awk '{print $1}')
     [ -z "$_br_devs" ] && _br_devs="$(get_lan_dev)"
+
+    # Read UCI host sections once for both hostname fallback and static lease data.
+    # Normalise MACs to lowercase colon-separated (handles hyphens from some UIs).
+    local sections first_sl sec smac sip sname
+    first_sl=1
+    sections=$(uci show dhcp 2>/dev/null | awk -F= '/=host$/ {sub(/^dhcp\./, "", $1); print $1}')
+
+    # Write UCI hostnames to temp file so awk can use them as fallback when
+    # /tmp/dhcp.leases has no name (e.g. VLAN/IoT devices that don't send a
+    # hostname in their DHCP request but have one set via UCI host.name).
+    for sec in $sections; do
+        smac=$(uci -q get "dhcp.${sec}.mac" 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr '-' ':')
+        sname=$(uci -q get "dhcp.${sec}.name" 2>/dev/null)
+        [ -n "$smac" ] && [ -n "$sname" ] && printf '%s %s\n' "$smac" "$sname"
+    done > "$uci_names_file"
 
     printf '{"devices":['
 
@@ -486,9 +502,16 @@ get_devices() {
             ip neigh show dev "$_dev" 2>/dev/null
         done
     } | \
-    awk -v leases="$leases_file" '
+    awk -v leases="$leases_file" -v uci_names="$uci_names_file" '
     BEGIN {
         first = 1
+        # Load UCI names first (lower priority — overridden by dhcp.leases below)
+        while ((getline line < uci_names) > 0) {
+            n = index(line, " ")
+            if (n > 0) { m = substr(line,1,n-1); h = substr(line,n+1); if (m != "") mac_host[m] = h }
+        }
+        close(uci_names)
+        # DHCP lease hostnames take precedence (client-supplied names)
         while ((getline line < leases) > 0) {
             split(line, f, " ")
             if (f[4] != "*" && f[4] != "")
@@ -517,14 +540,14 @@ get_devices() {
     }
     '
 
+    rm -f "$uci_names_file"
+
     printf '],"static_leases":{'
 
-    # Read host sections from UCI dhcp config
-    local sections first_sl sec smac sip
-    first_sl=1
-    sections=$(uci show dhcp 2>/dev/null | awk -F= '/=host$/ {sub(/^dhcp\./, "", $1); print $1}')
+    # Output static lease map with normalised MACs (lowercase, colons not hyphens).
+    # The frontend matches these against ip-neigh MACs which are always colon-format.
     for sec in $sections; do
-        smac=$(uci -q get "dhcp.${sec}.mac" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+        smac=$(uci -q get "dhcp.${sec}.mac" 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr '-' ':')
         sip=$(uci -q get "dhcp.${sec}.ip" 2>/dev/null)
         if [ -n "$smac" ] && [ -n "$sip" ]; then
             [ "$first_sl" = "0" ] && printf ','

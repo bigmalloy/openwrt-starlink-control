@@ -746,11 +746,12 @@ function buildDevicesCard(devData, s) {
 		var pinStyle = staticIp
 			? 'background:var(--sl-inset);border:1px solid var(--sl-green);color:var(--sl-green)'
 			: 'background:var(--sl-inset);border:1px solid var(--sl-border);color:var(--sl-muted)';
-		var pinLabel = staticIp ? ('📌\u00a0' + staticIp) : '📌\u00a0Static IP';
+		var pinLabel = staticIp ? ('📌\u00a0' + staticIp + '\u00a0✕') : '📌\u00a0Set Static IP';
+		var pinClick = staticIp ? 'starlinkRemoveStaticIp' : 'starlinkSetStaticIp';
 		body += '<span style="display:flex;align-items:center;gap:6px;flex-shrink:0">' +
 			'<span style="color:var(--sl-muted);font-size:0.78em;font-family:monospace">' + d.mac + '</span>' +
 			badge(d.state, stateC) +
-			'<button onclick="starlinkSetStaticIp(\'' + rowKey + '\')" ' +
+			'<button onclick="' + pinClick + '(\'' + rowKey + '\')" ' +
 			'style="' + pinStyle + ';padding:2px 8px;border-radius:4px;font-size:0.78em;cursor:pointer;white-space:nowrap">' +
 			pinLabel + '</button>' +
 			'</span>';
@@ -1008,31 +1009,31 @@ window.starlinkRebootDish = function(btn) {
 	});
 };
 
-// ── Static IP handler ────────────────────────────────────────────────────────
+// ── Static IP handlers ───────────────────────────────────────────────────────
 
 window.starlinkSetStaticIp = function(rowKey) {
 	var dev = _deviceData[rowKey];
 	if (!dev) return;
 	var label = dev.hostname || dev.mac;
-	var current = dev.static_ip || dev.ip;
-	var hint = dev.static_ip ? ' (clear to remove)' : '';
-	var newIp = window.prompt('Static IP for ' + label + hint + ':', current);
+	var newIp = window.prompt('Set static IP for ' + label + ':', dev.ip);
 	if (newIp === null) return; // cancelled
 	newIp = newIp.trim();
-	if (newIp === '') {
-		if (!dev.static_ip) return; // nothing to remove
-		callRemoveStaticIp(dev.mac).then(function(r) {
-			if (!r || !r.success) window.alert('Failed to remove static IP');
-		}).catch(function() {
-			window.alert('RPC error');
-		});
-	} else {
-		callSetStaticIp(dev.mac, newIp, dev.hostname).then(function(r) {
-			if (!r || !r.success) window.alert('Failed to set static IP');
-		}).catch(function() {
-			window.alert('RPC error');
-		});
-	}
+	if (newIp === '') return;
+	callSetStaticIp(dev.mac, newIp, dev.hostname).then(function(r) {
+		if (!r || !r.success) window.alert('Failed to set static IP');
+	}).catch(function() {
+		window.alert('RPC error');
+	});
+};
+
+window.starlinkRemoveStaticIp = function(rowKey) {
+	var dev = _deviceData[rowKey];
+	if (!dev || !dev.static_ip) return;
+	callRemoveStaticIp(dev.mac).then(function(r) {
+		if (!r || !r.success) window.alert('Failed to remove static IP');
+	}).catch(function() {
+		window.alert('RPC error');
+	});
 };
 
 // ── HW offloading toggle handler ─────────────────────────────────────────────
