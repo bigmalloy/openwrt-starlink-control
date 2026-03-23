@@ -113,6 +113,10 @@ var callRemoveStaticIp = rpc.declare({
 // Per-device data store — keyed by row index, repopulated on each render
 var _deviceData = {};
 
+// Connected Devices sort mode: false = active-first (default), true = all devices stable
+var _devSortAll = false;
+var _devListRaw = null; // { list: [...], staticLeases: {...} } — cached for sort toggle
+
 // Tracks whether "Apply Starlink Config" was clicked and the script is still running.
 // Persists across view rebuilds so the button shows a waiting state mid-flight.
 var _cfgApplying = false;
@@ -707,8 +711,13 @@ function buildDevicesCard(devData, s) {
 	var activeCount = 0;
 	for (var i = 0; i < list.length; i++) { if (list[i].active) activeCount++; }
 
-	var titleBadge = badge(activeCount + ' active', activeCount > 0 ? 'ok' : 'muted') +
-		'&nbsp;' + badge(list.length + ' total', 'info');
+	// Clickable sort-toggle badges: active = sort active-first, total = stable alpha order
+	var _bBase = ';padding:1px 8px;border-radius:10px;font-size:0.82em;font-weight:600;white-space:nowrap;cursor:pointer';
+	var _bActiveStyle = (BADGE_COLORS[activeCount > 0 ? 'ok' : 'muted']) + _bBase + (_devSortAll ? ';opacity:0.45' : '');
+	var _bTotalStyle  = (BADGE_COLORS['info']) + _bBase + (_devSortAll ? '' : ';opacity:0.45');
+	var titleBadge =
+		'<span id="sl-dev-badge-active" onclick="starlinkDevSort(false)" title="Active first" style="' + _bActiveStyle + '">' + activeCount + '\u00a0active</span>' +
+		'&nbsp;<span id="sl-dev-badge-total" onclick="starlinkDevSort(true)" title="All devices (stable)" style="' + _bTotalStyle + '">' + list.length + '\u00a0total</span>';
 
 	var body = '';
 
@@ -719,45 +728,28 @@ function buildDevicesCard(devData, s) {
 		return card('Connected Devices', '🖥️', body, 'sl-card-full');
 	}
 
-	_deviceData = {};
-	body += '<div style="max-height:400px;overflow-y:auto;margin:-4px -2px">';
-	for (var j = 0; j < list.length; j++) {
-		var d    = list[j];
-		var name = d.hostname ? d.hostname : d.ip;
-		var sub  = d.hostname ? d.ip : '';
-		var dotC   = d.active ? 'var(--sl-green)' : 'var(--sl-muted)';
-		var stateC = d.active ? 'ok' : 'off';
-		var macKey = d.mac.toLowerCase();
-		var staticIp = staticLeases[macKey] || '';
-		var rowKey = 'sl-dev-' + j;
-		_deviceData[rowKey] = { mac: d.mac, ip: d.ip, hostname: d.hostname || '', static_ip: staticIp };
+	// Cache raw data so the sort toggle can re-render without a full refresh
+	_devListRaw = { list: list, staticLeases: staticLeases };
 
-		body += '<div class="sl-row" style="padding:6px 2px">';
-
-		// Left: dot + name + IP sub-label
-		body += '<span style="display:flex;align-items:center;gap:7px;min-width:0">' +
-			'<span style="width:8px;height:8px;border-radius:50%;background:' + dotC + ';flex-shrink:0"></span>' +
-			'<span style="min-width:0">' +
-			'<span style="font-weight:500">' + name + '</span>' +
-			(sub ? '<span style="color:var(--sl-muted);font-size:0.8em;margin-left:5px">' + sub + '</span>' : '') +
-			'</span></span>';
-
-		// Right: MAC + state badge + static IP button
-		var pinStyle = staticIp
-			? 'background:var(--sl-inset);border:1px solid var(--sl-green);color:var(--sl-green)'
-			: 'background:var(--sl-inset);border:1px solid var(--sl-border);color:var(--sl-muted)';
-		var pinLabel = staticIp ? ('📌\u00a0' + staticIp + '\u00a0✕') : '📌\u00a0Set Static IP';
-		var pinClick = staticIp ? 'starlinkRemoveStaticIp' : 'starlinkSetStaticIp';
-		body += '<span style="display:flex;align-items:center;gap:6px;flex-shrink:0">' +
-			'<span style="color:var(--sl-muted);font-size:0.78em;font-family:monospace">' + d.mac + '</span>' +
-			badge(d.state, stateC) +
-			'<button onclick="' + pinClick + '(\'' + rowKey + '\')" ' +
-			'style="' + pinStyle + ';padding:2px 8px;border-radius:4px;font-size:0.78em;cursor:pointer;white-space:nowrap">' +
-			pinLabel + '</button>' +
-			'</span>';
-
-		body += '</div>';
+	// Apply current sort mode
+	var sorted = list.slice();
+	if (_devSortAll) {
+		sorted.sort(function(a, b) {
+			var na = (a.hostname || a.ip).toLowerCase();
+			var nb = (b.hostname || b.ip).toLowerCase();
+			return na < nb ? -1 : na > nb ? 1 : 0;
+		});
+	} else {
+		sorted.sort(function(a, b) {
+			if (a.active !== b.active) return a.active ? -1 : 1;
+			var na = (a.hostname || a.ip).toLowerCase();
+			var nb = (b.hostname || b.ip).toLowerCase();
+			return na < nb ? -1 : na > nb ? 1 : 0;
+		});
 	}
+
+	body += '<div id="sl-dev-list" style="max-height:400px;overflow-y:auto;margin:-4px -2px">';
+	body += _buildDeviceRowsHtml(sorted, staticLeases);
 	body += '</div>';
 
 	// DHCP range
@@ -774,6 +766,51 @@ function buildDevicesCard(devData, s) {
 	}
 
 	return card('Connected Devices &nbsp;' + titleBadge, '🖥️', body, 'sl-card-full');
+}
+
+// Render device rows into a list, repopulating _deviceData. Called by buildDevicesCard
+// and starlinkDevSort so both paths produce identical markup.
+function _buildDeviceRowsHtml(list, staticLeases) {
+	_deviceData = {};
+	var html = '';
+	for (var j = 0; j < list.length; j++) {
+		var d      = list[j];
+		var name   = d.hostname ? d.hostname : d.ip;
+		var sub    = d.hostname ? d.ip : '';
+		var dotC   = d.active ? 'var(--sl-green)' : 'var(--sl-muted)';
+		var stateC = d.active ? 'ok' : 'off';
+		var macKey = d.mac.toLowerCase();
+		var staticIp = staticLeases[macKey] || '';
+		var rowKey = 'sl-dev-' + j;
+		_deviceData[rowKey] = { mac: d.mac, ip: d.ip, hostname: d.hostname || '', static_ip: staticIp };
+
+		html += '<div class="sl-row" style="padding:6px 2px">';
+
+		// Left: dot + name + IP sub-label
+		html += '<span style="display:flex;align-items:center;gap:7px;min-width:0">' +
+			'<span style="width:8px;height:8px;border-radius:50%;background:' + dotC + ';flex-shrink:0"></span>' +
+			'<span style="min-width:0">' +
+			'<span style="font-weight:500">' + name + '</span>' +
+			(sub ? '<span style="color:var(--sl-muted);font-size:0.8em;margin-left:5px">' + sub + '</span>' : '') +
+			'</span></span>';
+
+		// Right: MAC + state badge + static IP button
+		var pinStyle = staticIp
+			? 'background:var(--sl-inset);border:1px solid var(--sl-green);color:var(--sl-green)'
+			: 'background:var(--sl-inset);border:1px solid var(--sl-border);color:var(--sl-muted)';
+		var pinLabel = staticIp ? ('📌\u00a0' + staticIp + '\u00a0✕') : '📌\u00a0Set Static IP';
+		var pinClick = staticIp ? 'starlinkRemoveStaticIp' : 'starlinkSetStaticIp';
+		html += '<span style="display:flex;align-items:center;gap:6px;flex-shrink:0">' +
+			'<span style="color:var(--sl-muted);font-size:0.78em;font-family:monospace">' + d.mac + '</span>' +
+			badge(d.state, stateC) +
+			'<button onclick="' + pinClick + '(\'' + rowKey + '\')" ' +
+			'style="' + pinStyle + ';padding:2px 8px;border-radius:4px;font-size:0.78em;cursor:pointer;white-space:nowrap">' +
+			pinLabel + '</button>' +
+			'</span>';
+
+		html += '</div>';
+	}
+	return html;
 }
 
 function buildDNSCard(s) {
@@ -1007,6 +1044,38 @@ window.starlinkRebootDish = function(btn) {
 		btn.textContent = '✗ RPC error';
 		btn.disabled = false;
 	});
+};
+
+// ── Connected Devices sort toggle ────────────────────────────────────────────
+
+window.starlinkDevSort = function(all) {
+	_devSortAll = all;
+	if (!_devListRaw) return;
+
+	var sorted = _devListRaw.list.slice();
+	if (all) {
+		sorted.sort(function(a, b) {
+			var na = (a.hostname || a.ip).toLowerCase();
+			var nb = (b.hostname || b.ip).toLowerCase();
+			return na < nb ? -1 : na > nb ? 1 : 0;
+		});
+	} else {
+		sorted.sort(function(a, b) {
+			if (a.active !== b.active) return a.active ? -1 : 1;
+			var na = (a.hostname || a.ip).toLowerCase();
+			var nb = (b.hostname || b.ip).toLowerCase();
+			return na < nb ? -1 : na > nb ? 1 : 0;
+		});
+	}
+
+	var el = document.getElementById('sl-dev-list');
+	if (el) el.innerHTML = _buildDeviceRowsHtml(sorted, _devListRaw.staticLeases);
+
+	// Update badge opacity to reflect active sort mode
+	var ba = document.getElementById('sl-dev-badge-active');
+	var bt = document.getElementById('sl-dev-badge-total');
+	if (ba) ba.style.opacity = all ? '0.45' : '1';
+	if (bt) bt.style.opacity = all ? '1' : '0.45';
 };
 
 // ── Static IP handlers ───────────────────────────────────────────────────────
