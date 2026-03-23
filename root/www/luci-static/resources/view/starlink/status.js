@@ -1148,7 +1148,7 @@ return view.extend({
 
 		// Header
 		html += '<div class="sl-header">';
-		html += '<div class="sl-title">🛸 Starlink Control</div>';
+		html += '<div class="sl-title">🛸 Starlink Control <span style="font-size:0.6em;font-weight:400;color:var(--sl-muted);letter-spacing:.03em">v2.1</span></div>';
 		html += '<div class="sl-meta">';
 		if (dishState) {
 			html += badge(dishState, isConn ? 'ok' : 'warn') + ' ';
