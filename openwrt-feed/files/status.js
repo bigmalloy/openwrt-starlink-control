@@ -260,8 +260,7 @@ function buildDishCard(d) {
 	if (!d || !d.available) {
 		var reason = (d && d.error) ? d.error : 'unavailable';
 		body += '<div class="sl-na">Dish API: ' + reason + '</div>';
-		body += '<div class="sl-note">For live dish telemetry, install <code>grpcurl</code> (linux/arm64) to <code>/usr/bin/grpcurl</code>.<br>' +
-			'Download from <strong>github.com/fullstorydev/grpcurl/releases</strong></div>';
+		body += '<div class="sl-note">For live dish telemetry, install <code>starlink-dish</code> by running <code>/usr/bin/install-grpcurl</code> on the router.</div>';
 		return card('Dish Telemetry', '📡', body);
 	}
 
@@ -392,10 +391,10 @@ function buildAlertsCard(d) {
 	body += '<button class="sl-reboot-btn" id="sl-reboot-btn" onclick="starlinkRebootDish(this)">⟳ Reboot Dish</button>';
 
 	// Heater status (read-only — dish setConfig requires SpaceX auth)
-	var heaterLabel = d.heater_mode === 'ALWAYS_ON'  ? 'always on'  :
-	                  d.heater_mode === 'ALWAYS_OFF' ? 'always off' : 'auto';
-	var heaterStyle = d.heater_mode === 'ALWAYS_ON'  ? 'warn'  :
-	                  d.heater_mode === 'ALWAYS_OFF' ? 'muted' : 'ok';
+	var heaterLabel = d.snow_melt_mode === 'ALWAYS_ON'  ? 'always on'  :
+	                  d.snow_melt_mode === 'ALWAYS_OFF' ? 'always off' : 'auto';
+	var heaterStyle = d.snow_melt_mode === 'ALWAYS_ON'  ? 'warn'  :
+	                  d.snow_melt_mode === 'ALWAYS_OFF' ? 'muted' : 'ok';
 	body += row('❄ Snow melt heater', badge(heaterLabel, heaterStyle));
 
 	return card('Alerts', '🔔', body);

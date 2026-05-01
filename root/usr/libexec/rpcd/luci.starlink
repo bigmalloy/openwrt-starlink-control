@@ -5,7 +5,6 @@
 
 DISH_IP="192.168.100.1"
 DISH_PORT="9200"
-DISH_SVC="SpaceX.API.Device.Device/Handle"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -54,16 +53,6 @@ json_str() {
     printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n\r\t' '   '
 }
 
-# jsonfilter outputs 1/0 for JSON booleans; normalize to true/false.
-# Sets variable named $1 in the caller. $2=raw value, $3=default (default: "unknown")
-bool_norm() {
-    case "$2" in
-        1|true)  eval "$1=true"  ;;
-        0|false) eval "$1=false" ;;
-        *)       eval "$1=${3:-unknown}" ;;
-    esac
-}
-
 get_ping_avg() {
     # Returns average RTT in ms, or empty string on failure
     ping -c 1 -W 2 "$1" 2>/dev/null \
@@ -92,146 +81,11 @@ get_wan_qdisc() {
 # ── dish gRPC query ───────────────────────────────────────────────────────────
 
 query_dish_status() {
-    if ! command -v grpcurl >/dev/null 2>&1; then
-        printf '{"available":false,"error":"grpcurl not found"}'
+    if ! command -v starlink-dish >/dev/null 2>&1; then
+        printf '{"available":false,"error":"starlink-dish not found — run /usr/bin/install-grpcurl"}'
         return
     fi
-
-    local raw cfg_raw tmp_status tmp_cfg
-    tmp_status="/tmp/.sl_dish_status.$$"
-    tmp_cfg="/tmp/.sl_dish_cfg.$$"
-
-    # Fire both gRPC calls in parallel to halve latency
-    grpcurl -plaintext -max-time 5 \
-        -d '{"getStatus":{}}' \
-        "${DISH_IP}:${DISH_PORT}" "${DISH_SVC}" > "$tmp_status" 2>/dev/null &
-    grpcurl -plaintext -max-time 5 \
-        -d '{"dish_get_config":{}}' \
-        "${DISH_IP}:${DISH_PORT}" "${DISH_SVC}" > "$tmp_cfg" 2>/dev/null &
-    wait
-
-    raw=$(cat "$tmp_status" 2>/dev/null); rm -f "$tmp_status"
-    cfg_raw=$(cat "$tmp_cfg" 2>/dev/null); rm -f "$tmp_cfg"
-
-    # snake_case fallback for older firmware
-    if [ -z "$raw" ]; then
-        raw=$(grpcurl -plaintext -max-time 5 \
-            -d '{"get_status":{}}' \
-            "${DISH_IP}:${DISH_PORT}" "${DISH_SVC}" 2>/dev/null)
-    fi
-
-    if [ -z "$raw" ]; then
-        printf '{"available":false,"error":"dish unreachable"}'
-        return
-    fi
-
-    # Parse all fields in a single jsonfilter pass (one fork instead of 25+)
-    local state disablement rf_ready latency drop obst downlink uplink
-    local snr_bool hw sw eth_speed gps_sats elevation attitude
-    local tilt_now bore_el des_el bore_az des_az uptime
-    local al_heating al_throttle al_shutdown al_psu_throttle
-    local al_motors al_mast al_slow_eth al_roaming
-    local sw_update_state currently_obstructed heater_mode
-
-    eval "$(echo "$raw" | jsonfilter \
-        -e 'state=@.dishGetStatus.state' \
-        -e 'disablement=@.dishGetStatus.disablementCode' \
-        -e 'rf_ready=@.dishGetStatus.readyStates.rf' \
-        -e 'latency=@.dishGetStatus.popPingLatencyMs' \
-        -e 'drop=@.dishGetStatus.popPingDropRate' \
-        -e 'obst=@.dishGetStatus.obstructionStats.fractionObstructed' \
-        -e 'downlink=@.dishGetStatus.downlinkThroughputBps' \
-        -e 'uplink=@.dishGetStatus.uplinkThroughputBps' \
-        -e 'snr_bool=@.dishGetStatus.isSnrAboveNoiseFloor' \
-        -e 'hw=@.dishGetStatus.deviceInfo.hardwareVersion' \
-        -e 'sw=@.dishGetStatus.deviceInfo.softwareVersion' \
-        -e 'eth_speed=@.dishGetStatus.ethSpeedMbps' \
-        -e 'gps_sats=@.dishGetStatus.gpsStats.gpsSats' \
-        -e 'elevation=@.dishGetStatus.boresightElevationDeg' \
-        -e 'attitude=@.dishGetStatus.alignmentStats.attitudeEstimationState' \
-        -e 'tilt_now=@.dishGetStatus.alignmentStats.tiltAngleDeg' \
-        -e 'bore_el=@.dishGetStatus.alignmentStats.boresightElevationDeg' \
-        -e 'des_el=@.dishGetStatus.alignmentStats.desiredBoresightElevationDeg' \
-        -e 'bore_az=@.dishGetStatus.alignmentStats.boresightAzimuthDeg' \
-        -e 'des_az=@.dishGetStatus.alignmentStats.desiredBoresightAzimuthDeg' \
-        -e 'uptime=@.dishGetStatus.deviceState.uptimeS' \
-        -e 'al_heating=@.dishGetStatus.alerts.isHeating' \
-        -e 'al_throttle=@.dishGetStatus.alerts.thermalThrottle' \
-        -e 'al_shutdown=@.dishGetStatus.alerts.thermalShutdown' \
-        -e 'al_psu_throttle=@.dishGetStatus.alerts.powerSupplyThermalThrottle' \
-        -e 'al_motors=@.dishGetStatus.alerts.motorsStuck' \
-        -e 'al_mast=@.dishGetStatus.alerts.mastNotVertical' \
-        -e 'al_slow_eth=@.dishGetStatus.alerts.slowEthernetSpeeds' \
-        -e 'al_roaming=@.dishGetStatus.alerts.roaming' \
-        -e 'sw_update_state=@.dishGetStatus.softwareUpdateState' \
-        -e 'currently_obstructed=@.dishGetStatus.currentlyObstructed' \
-        2>/dev/null)"
-
-    # uptime fallback: Gen3 puts it in deviceState, older firmware in deviceInfo
-    [ -z "$uptime" ] && \
-        uptime=$(echo "$raw" | jsonfilter -e '@.dishGetStatus.deviceInfo.upTimeS' 2>/dev/null)
-
-    # heater mode from config response (queried in parallel above)
-    heater_mode=$(echo "$cfg_raw" | jsonfilter -e '@.dishGetConfig.dishConfig.snowMeltMode' 2>/dev/null)
-
-    # Gen3: state enum is absent when CONNECTED (proto3 omits zero-value fields).
-    # disablementCode absent also means OKAY (proto3 zero value).
-    # readyStates.rf may be absent in bridge/bypass mode even when fully operational,
-    # so we rely on disablementCode alone rather than requiring rf=true.
-    if [ -z "$state" ]; then
-        local eff_dis="${disablement:-OKAY}"
-        if [ "$eff_dis" = "OKAY" ]; then
-            state="CONNECTED"
-        else
-            state="DISABLED ($eff_dis)"
-        fi
-    fi
-
-    printf '{"available":true'
-    printf ',"state":"%s"'              "$(json_str "$state")"
-    printf ',"uptime":%s'               "${uptime:-0}"
-    printf ',"hardware":"%s"'           "$(json_str "${hw:-}")"
-    printf ',"software":"%s"'           "$(json_str "${sw:-}")"
-    printf ',"latency_ms":%s'           "${latency:-0}"
-    printf ',"drop_rate":%s'            "${drop:-0}"
-    printf ',"fraction_obstructed":%s'  "${obst:-0}"
-    printf ',"downlink_bps":%s'         "${downlink:-0}"
-    printf ',"uplink_bps":%s'           "${uplink:-0}"
-    # Normalize jsonfilter booleans (1/0 → true/false) without subshells
-    bool_norm _snr              "${snr_bool}"
-    bool_norm _obstructed       "${currently_obstructed}" false
-    bool_norm _al_heating       "${al_heating}"           false
-    bool_norm _al_throttle      "${al_throttle}"          false
-    bool_norm _al_shutdown      "${al_shutdown}"          false
-    bool_norm _al_psu_throttle  "${al_psu_throttle}"      false
-    bool_norm _al_motors        "${al_motors}"            false
-    bool_norm _al_mast          "${al_mast}"              false
-    bool_norm _al_slow_eth      "${al_slow_eth}"          false
-    bool_norm _al_roaming       "${al_roaming}"           false
-
-    printf ',"snr_above_noise":"%s"'    "$_snr"
-    printf ',"eth_speed_mbps":%s'       "${eth_speed:-0}"
-    printf ',"gps_sats":%s'             "${gps_sats:-0}"
-    printf ',"elevation_deg":%s'              "${elevation:-0}"
-    printf ',"attitude":"%s"'                "$(json_str "${attitude:-}")"
-    printf ',"tilt_angle_deg":%s'            "${tilt_now:-0}"
-    printf ',"bore_elevation_deg":%s'        "${bore_el:-0}"
-    printf ',"desired_elevation_deg":%s'     "${des_el:-0}"
-    printf ',"bore_azimuth_deg":%s'          "${bore_az:-0}"
-    printf ',"desired_azimuth_deg":%s'       "${des_az:-0}"
-    printf ',"sw_update_state":"%s"'         "$(json_str "${sw_update_state:-IDLE}")"
-    printf ',"currently_obstructed":"%s"'    "$_obstructed"
-    printf ',"al_heating":"%s"'              "$_al_heating"
-    printf ',"al_throttle":"%s"'             "$_al_throttle"
-    printf ',"al_shutdown":"%s"'             "$_al_shutdown"
-    printf ',"al_psu_throttle":"%s"'         "$_al_psu_throttle"
-    printf ',"al_motors":"%s"'               "$_al_motors"
-    printf ',"al_mast":"%s"'                 "$_al_mast"
-    printf ',"al_slow_eth":"%s"'             "$_al_slow_eth"
-    printf ',"al_roaming":"%s"'              "$_al_roaming"
-    printf ',"disablement":"%s"'             "$(json_str "${disablement:-OKAY}")"
-    printf ',"heater_mode":"%s"'             "$(json_str "${heater_mode:-auto}")"
-    printf '}'
+    starlink-dish dish -d "http://${DISH_IP}:${DISH_PORT}"
 }
 
 # ── system status ─────────────────────────────────────────────────────────────
@@ -348,19 +202,11 @@ get_system_status() {
 # ── dish reboot ───────────────────────────────────────────────────────────────
 
 reboot_dish() {
-    if ! command -v grpcurl >/dev/null 2>&1; then
-        printf '{"success":false,"error":"grpcurl not found"}'
+    if ! command -v starlink-dish >/dev/null 2>&1; then
+        printf '{"success":false,"error":"starlink-dish not found — run /usr/bin/install-grpcurl"}'
         return
     fi
-    local result
-    result=$(grpcurl -plaintext -max-time 10 \
-        -d '{"reboot":{}}' \
-        "${DISH_IP}:${DISH_PORT}" "${DISH_SVC}" 2>/dev/null)
-    if echo "$result" | grep -q '"reboot"'; then
-        printf '{"success":true}'
-    else
-        printf '{"success":false,"error":"dish unreachable or reboot failed"}'
-    fi
+    starlink-dish reboot -d "http://${DISH_IP}:${DISH_PORT}"
 }
 
 # ── disable hardware offloading ───────────────────────────────────────────────
@@ -738,31 +584,19 @@ apply_starlink_config() {
 # ── dish heater control ───────────────────────────────────────────────────────
 
 set_heater_on() {
-    if ! command -v grpcurl >/dev/null 2>&1; then
-        printf '{"success":false,"error":"grpcurl not found"}'
+    if ! command -v starlink-dish >/dev/null 2>&1; then
+        printf '{"success":false,"error":"starlink-dish not found — run /usr/bin/install-grpcurl"}'
         return
     fi
-    if grpcurl -plaintext -max-time 10 \
-        -d '{"dish_set_config":{"dish_config":{"snow_melt_mode":"ALWAYS_ON","apply_snow_melt_mode":true}}}' \
-        "${DISH_IP}:${DISH_PORT}" "${DISH_SVC}" >/dev/null 2>&1; then
-        printf '{"success":true}'
-    else
-        printf '{"success":false,"error":"dish unreachable or command failed"}'
-    fi
+    starlink-dish set-heater-on -d "http://${DISH_IP}:${DISH_PORT}"
 }
 
 set_heater_off() {
-    if ! command -v grpcurl >/dev/null 2>&1; then
-        printf '{"success":false,"error":"grpcurl not found"}'
+    if ! command -v starlink-dish >/dev/null 2>&1; then
+        printf '{"success":false,"error":"starlink-dish not found — run /usr/bin/install-grpcurl"}'
         return
     fi
-    if grpcurl -plaintext -max-time 10 \
-        -d '{"dish_set_config":{"dish_config":{"snow_melt_mode":"ALWAYS_OFF","apply_snow_melt_mode":true}}}' \
-        "${DISH_IP}:${DISH_PORT}" "${DISH_SVC}" >/dev/null 2>&1; then
-        printf '{"success":true}'
-    else
-        printf '{"success":false,"error":"dish unreachable or command failed"}'
-    fi
+    starlink-dish set-heater-off -d "http://${DISH_IP}:${DISH_PORT}"
 }
 
 # ── rpcd dispatch ─────────────────────────────────────────────────────────────
