@@ -70,35 +70,70 @@ The setup script from [starlink-openwrt-ipv6-optimized](https://github.com/bigma
 | `luci-base` | LuCI web interface |
 | `rpcd` | RPC daemon (usually pre-installed) |
 | `jsonfilter` | JSON parser for shell scripts |
-| `grpcurl` | Required for dish telemetry — **installed automatically by the APK from v1.0.0-r5** (downloaded to `/usr/bin/grpcurl` during `apk add`) |
+| `starlink-dish` | Required for dish telemetry — **installed automatically on aarch64** during `apk add` (downloaded to `/usr/bin/starlink-dish`). 1.4 MB static Rust binary; replaces grpcurl from v2.1-r5. |
 
 ---
 
 ## Installation
 
-Download the latest `.apk` from [Releases](../../releases).
+### Verified install (recommended)
 
 ```sh
-# Copy to router
-scp -O luci-app-starlink-1.0.0-r10.apk root@192.168.1.1:/tmp/
+# 1. Add signing key (one-time)
+wget -O /etc/apk/keys/luci-fancontrol-signing.pub \
+  https://github.com/bigmalloy/openwrt-starlink-control/releases/latest/download/luci-fancontrol-signing.pub
 
-# Install (no key verification needed for local install)
-ssh root@192.168.1.1 'apk add --allow-untrusted /tmp/luci-app-starlink-1.0.0-r10.apk'
+# 2. Install APK
+wget -O /tmp/luci-app-starlink.apk \
+  https://github.com/bigmalloy/openwrt-starlink-control/releases/latest/download/luci-app-starlink-2.1-r5.apk
+apk add /tmp/luci-app-starlink.apk
 ```
 
-The post-install script automatically downloads and installs `grpcurl`, then restarts `rpcd` and `uhttpd`. Navigate to **Network → Starlink** in the LuCI menu.
+### Quick install (skip signature check)
 
-> **Note:** From v1.0.0-r5, grpcurl is downloaded and installed automatically during `apk add`. No manual steps required. If the download fails (no internet access), run `/usr/bin/install-grpcurl` manually once connected.
+```sh
+wget -O /tmp/luci-app-starlink.apk \
+  https://github.com/bigmalloy/openwrt-starlink-control/releases/latest/download/luci-app-starlink-2.1-r5.apk
+apk add --allow-untrusted /tmp/luci-app-starlink.apk
+```
+
+The post-install script automatically downloads `starlink-dish` and restarts `rpcd` and `uhttpd`. Navigate to **Network → Starlink** in the LuCI menu.
+
+If the automatic download fails (no internet at install time), run `/usr/bin/install-grpcurl` once the router has connectivity.
+
+### Manual binary install (if postinst download fails)
+
+```sh
+wget -O /usr/bin/starlink-dish \
+  https://github.com/bigmalloy/starlink-panel/releases/latest/download/starlink-dish
+chmod +x /usr/bin/starlink-dish
+```
+
+---
+
+### Release notes
+
+> **v2.1-r5** — Replaced `grpcurl` with [`starlink-dish`](https://github.com/bigmalloy/starlink-panel), a purpose-built 1.4 MB Rust gRPC client. Outputs flat JSON directly — no shell parsing overhead. If upgrading from an earlier version, the postinst will remove grpcurl and install starlink-dish automatically.
 >
-> **Note:** From v1.0.0-r6, the **Turn Starlink Config On** button in the Configuration card applies the full recommended Starlink IPv6 setup directly from LuCI — no SSH or manual script execution needed.
+> **v2.1-r4** — Connected Devices sort toggle: click the **active** badge for active-first order, click **total** for stable alphabetical order. Sort persists across auto-refresh.
 >
-> **Note:** From v1.0.0-r7, DNS Servers, Connected Devices (with DHCP range), Router Stats, and the Set as Default Home Page button are included.
+> **v2.1-r3** — Fixed static IP detection for VLAN hostnames; two-button static IP UX (set / remove as separate actions).
 >
-> **Note:** From v1.0.0-r8, the DNS card includes a **DNS Mode selector** — switch between Default, Starlink (ISP), Family Filter, and Malware Filter with one click. DNS settings are no longer monitored for config drift, so changing DNS via LuCI will not affect the Starlink Config Active status.
+> **v2.1-r2** — Auto-detects LuCI theme (reads computed background luminance) for accurate dark/light card styling regardless of OS preference.
 >
-> **Note:** From v1.0.0-r9, the Connected Devices card supports **static IP assignment** — click 📌 next to any device to pin its IP, or clear the field to remove the lease. The Router Stats card includes a **hardware flow offloading toggle** with NPU name detected from the board target. Snow melt heater mode is shown in the Alerts card.
+> **v2.1** — Version number shown in header title; versioned APK filename.
 >
-> **Note:** From v1.0.0-r10, the Router Stats card shows an **animated fan icon** with current fan speed (state/max) and CPU temperature, colour-coded by temperature. Fan state is read from the kernel thermal cooling device — works on any router with a PWM fan.
+> **v1.0.0-r10** — Router Stats card shows an **animated fan icon** with current fan speed (state/max) and CPU temperature, colour-coded by temperature.
+>
+> **v1.0.0-r9** — Connected Devices supports **static IP assignment** — click 📌 next to any device to pin its IP. Router Stats includes a **hardware flow offloading toggle** with NPU name detected from board target.
+>
+> **v1.0.0-r8** — DNS card includes a **DNS Mode selector** — switch between Default, Starlink (ISP), Family Filter, and Malware Filter with one click.
+>
+> **v1.0.0-r7** — DNS Servers, Connected Devices (with DHCP range), Router Stats, and Set as Default Home Page button added.
+>
+> **v1.0.0-r6** — **Turn Starlink Config On** button applies full recommended Starlink IPv6 setup from LuCI — no SSH needed.
+>
+> **v1.0.0-r5** — Dish telemetry binary installed automatically during `apk add`.
 
 ---
 
