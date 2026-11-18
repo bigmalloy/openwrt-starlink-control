@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-starlink
 PKG_VERSION:=2.2
-PKG_RELEASE:=2
+PKG_RELEASE:=3
 
 PKG_MAINTAINER:=bigmalloy
 PKG_LICENSE:=MIT
@@ -22,7 +22,7 @@ endef
 define Package/luci-app-starlink/description
   LuCI dashboard for Starlink dish telemetry, IPv6 connectivity,
   traffic, alignment, alerts, and router configuration. Uses
-  starlink-dish (installed automatically on aarch64 by postinst).
+  starlink-dish (bundled in the package; installed on aarch64 by postinst).
 endef
 
 define Build/Compile
@@ -46,6 +46,9 @@ define Package/luci-app-starlink/install
 		$(1)/www/luci-static/resources/view/starlink/status.js
 
 	$(INSTALL_DIR) $(1)/usr/bin
+	$(INSTALL_DIR) $(1)/usr/libexec
+	$(INSTALL_BIN) ./files/starlink-dish-aarch64 \
+		$(1)/usr/libexec/starlink-dish-aarch64
 	$(INSTALL_BIN) ./files/install-grpcurl.sh \
 		$(1)/usr/bin/install-grpcurl
 	$(INSTALL_BIN) ./files/starlink-setup \

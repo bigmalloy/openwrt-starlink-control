@@ -71,7 +71,7 @@ The setup script from [starlink-openwrt-ipv6-optimized](https://github.com/bigma
 | `luci-base` | LuCI web interface |
 | `rpcd` | RPC daemon (usually pre-installed) |
 | `jsonfilter` | JSON parser for shell scripts |
-| `starlink-dish` | Required for dish telemetry — **installed automatically on aarch64** during `apk add` (downloaded to `/usr/bin/starlink-dish`). 1.4 MB static Rust binary; replaces grpcurl from v2.1-r5. |
+| `starlink-dish` | Required for dish telemetry — **bundled in the APK and installed automatically on aarch64** during `apk add` (to `/usr/bin/starlink-dish`). 1.4 MB static Rust binary; replaces grpcurl from v2.1-r5. |
 
 ---
 
@@ -100,7 +100,7 @@ apk add --allow-untrusted /tmp/luci-app-starlink.apk
 
 The post-install script automatically downloads `starlink-dish` and restarts `rpcd` and `uhttpd`. Navigate to **Network → Starlink** in the LuCI menu.
 
-If the automatic download fails (no internet at install time), run `/usr/bin/install-grpcurl` once the router has connectivity.
+If `/usr/bin/starlink-dish` is ever missing, run `/usr/bin/install-grpcurl` to reinstall it.
 
 ### Manual binary install (if postinst download fails)
 
